@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { PenSquare, ShieldCheck } from 'lucide-react';
 import { Card, CardHeader } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { rewardFunctions, statuses } from '../data/mockData';
+import NewRewardFunctionModal from '../components/modals/NewRewardFunctionModal';
 
 export default function RewardFunctions() {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -11,7 +15,10 @@ export default function RewardFunctions() {
           <p className="text-xs uppercase tracking-wide text-cyan-300">Control rewards</p>
           <h2 className="text-xl font-semibold text-white">Reward functions</h2>
         </div>
-        <button className="flex items-center gap-2 rounded-xl border border-slate-800/80 px-4 py-2 text-sm text-slate-200 hover:border-cyan-500/50">
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 rounded-xl border border-slate-800/80 px-4 py-2 text-sm text-slate-200 hover:border-cyan-500/50"
+        >
           <PenSquare size={16} /> Draft new
         </button>
       </div>
@@ -39,6 +46,8 @@ export default function RewardFunctions() {
           ))}
         </div>
       </Card>
+
+      <NewRewardFunctionModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }

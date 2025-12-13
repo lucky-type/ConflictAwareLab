@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { AlertTriangle, CheckCircle, Plus, Wifi } from 'lucide-react';
 import { Card, CardHeader } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { environments, statuses } from '../data/mockData';
+import NewEnvironmentModal from '../components/modals/NewEnvironmentModal';
 
 export default function Environments() {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -11,7 +15,10 @@ export default function Environments() {
           <p className="text-xs uppercase tracking-wide text-cyan-300">Mission spaces</p>
           <h2 className="text-xl font-semibold text-white">Environment catalog</h2>
         </div>
-        <button className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20">
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20"
+        >
           <Plus size={16} /> New environment
         </button>
       </div>
@@ -59,6 +66,8 @@ export default function Environments() {
           ))}
         </div>
       </Card>
+
+      <NewEnvironmentModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }
