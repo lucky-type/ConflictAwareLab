@@ -1,1 +1,31 @@
-# DroneSim
+# DroneSim Control Center
+
+This repository contains a Vite + React + TypeScript control surface for managing DroneSim experiments. The UI ships with Tailwind CSS v4, React Router, lucide-react icons, and Recharts visualizations.
+
+## Getting started
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Start the dev server
+
+```bash
+npm run dev
+```
+
+3. Build for production
+
+```bash
+npm run build
+```
+
+## Features
+
+- Sidebar layout with persistent UI settings stored in `localStorage`
+- Dashboard, Environments, Algorithms, Reward Functions, Models, and Experiments routes
+- Reusable cards, badges, tables, and modal workflows (e.g., new experiment)
+- Charts powered by Recharts and icons from lucide-react
+- Tailwind CSS v4 configured via `@tailwindcss/postcss`
