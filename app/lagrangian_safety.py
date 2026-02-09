@@ -149,12 +149,6 @@ class LagrangianCallback(BaseCallback):
         self.completed_episode_costs = []  # List of CUMULATIVE costs per episode
         self.episode_count = 0
         
-        # SHIELDING COMMENTED OUT
-        # Shield intervention tracking
-        # self.episode_shield_interventions = None  # Per-env episode intervention count
-        # self.total_shield_interventions = 0
-        # self.total_shield_steps = 0
-        
     def _on_training_start(self) -> None:
         """Initialize episode cost tracking for all parallel environments."""
         n_envs = self.training_env.num_envs
@@ -163,8 +157,6 @@ class LagrangianCallback(BaseCallback):
         if self.episode_costs is None:
             self.episode_costs = [0.0] * n_envs
             self.episode_lengths = [0] * n_envs
-            # SHIELDING COMMENTED OUT
-            # self.episode_shield_interventions = [0] * n_envs
             
             if self.verbose >= 1:
                 print(f"\n[LagrangianCallback] Initialized for {n_envs} parallel environments")
@@ -250,12 +242,6 @@ class LagrangianCallback(BaseCallback):
             self.episode_costs[i] += violation_cost
             self.episode_lengths[i] += 1
             
-            # SHIELDING COMMENTED OUT
-            # 3. Track shield interventions
-            # if info.get("shield_intervention", False):
-            #     self.episode_shield_interventions[i] += 1
-            # self.total_shield_steps += 1
-            
             if dones[i]:
                 # 4. Use cumulative episode cost so a crash is 1.0 regardless of length.
                 cumulative_cost = self.episode_costs[i]
@@ -263,17 +249,11 @@ class LagrangianCallback(BaseCallback):
                 self.completed_episode_costs.append(cumulative_cost)
                 self.episode_count += 1
                 
-                # SHIELDING COMMENTED OUT
-                # Track shield interventions for this episode
-                # self.total_shield_interventions += self.episode_shield_interventions[i]
-                
                 if self.verbose >= 2:
                     print(f"[SAFETY] Ep {self.episode_count}: Cost={cumulative_cost:.3f} Eps={self.epsilon}")
                 
                 self.episode_costs[i] = 0.0
                 self.episode_lengths[i] = 0
-                # SHIELDING COMMENTED OUT
-                # self.episode_shield_interventions[i] = 0
                 
                 if self.episode_count % self.update_every_n == 0:
                     self._update_lambda()
@@ -323,13 +303,6 @@ class LagrangianCallback(BaseCallback):
             self.logger.record("safety/warmup_lambda_scheduled", lambda_scheduled)
             self.logger.record("safety/warmup_progress", 
                              self.episode_count / self.warmup_episodes)
-        
-        # SHIELDING COMMENTED OUT
-        # Log shield metrics
-        # if self.total_shield_steps > 0:
-        #     shield_rate = (self.total_shield_interventions / self.total_shield_steps) * 100
-        #     self.logger.record("safety/shield_interventions_total", self.total_shield_interventions)
-        #     self.logger.record("safety/shield_intervention_rate", shield_rate)
         
         # Console logging
         warmup_str = (f" [WARMUP {self.episode_count}/{self.warmup_episodes} eps, "

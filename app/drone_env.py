@@ -573,9 +573,9 @@ class DroneSwarmEnv(gym.Env):
         if self.kinematic_type == "semi-holonomic" and hasattr(self, 'goal_position'):
             # Calculate initial yaw to point toward goal
             to_goal = self.goal_position - np.array(position)
-            initial_yaw = np.arctan2(to_goal[0], to_goal[2])  # Yaw around Y axis (x-z plane)
-            # Convert yaw to quaternion
-            orientation = p.getQuaternionFromEuler([0, initial_yaw, 0])
+            initial_yaw = np.arctan2(to_goal[0], to_goal[2])  # Yaw around Z axis (x-z plane)
+            # Convert yaw to quaternion (Z-axis rotation = euler[2])
+            orientation = p.getQuaternionFromEuler([0, 0, initial_yaw])
         else:
             orientation = [0, 0, 0, 1]  # Default orientation
         
@@ -1008,8 +1008,8 @@ class DroneSwarmEnv(gym.Env):
                 np.cos(new_yaw) * v_forward * self.max_velocity   # Z component (forward)
             ])
             
-            # Update orientation
-            new_orientation = p.getQuaternionFromEuler([0, new_yaw, 0])
+            # Update orientation (Z-axis rotation = euler[2])
+            new_orientation = p.getQuaternionFromEuler([0, 0, new_yaw])
             p.resetBasePositionAndOrientation(
                 self.drone_id, 
                 position.tolist(), 

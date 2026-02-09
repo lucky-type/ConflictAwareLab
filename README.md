@@ -14,13 +14,12 @@ The core research objective of this platform is to validate the effectiveness of
 Standard residual learning (Base Policy + Residual Policy) often struggles with balancing performance and safety. A fixed weighting factor ($k$) for the residual policy can lead to either unsafe behaviors (if $k$ is too high) or inability to correct base model mistakes (if $k$ is too low).
 
 ### The Solution: Adaptive K
-CARS dynamically adjusts the residual contribution ($k_{effective}$) based on three real-time signals:
+CARS dynamically adjusts the residual contribution ($k_{effective}$) based on two real-time signals:
 
-$$k_{effective} = k_{factor} \times K_{conf} \times K_{risk} \times K_{shield}$$
+$$k_{effective} = k_{factor} \times K_{conf} \times K_{risk}$$
 
 1.  **$K_{conf}$ (Conflict-Aware):** Reduces $k$ when the residual action vectors conflict with the base policy (measured via cosine similarity).
 2.  **$K_{risk}$ (Risk-Aware):** Reduces $k$ when the Lagrangian multiplier ($\lambda$) is high, indicating increased violation of safety constraints.
-3.  **$K_{shield}$ (Shield-Aware):** Reduces $k$ when the LIDAR-based safety shield frequently intervenes.
 
 ---
 
@@ -37,7 +36,6 @@ $$k_{effective} = k_{factor} \times K_{conf} \times K_{risk} \times K_{shield}$$
     - Live charts for reward, cost, and safety metrics.
 - **Safety Pipelines:**
     - **Lagrangian Relaxation** for constrained updates.
-    - **Safety Shield** (LIDAR-based) for emergency braking and overriding.
     - **CARS** ablation study support (granular control over $K$ components).
 - **Analysis:**
     - Automated metrics collection (Success Rate, Violation Rate, Crash Rate).
@@ -68,7 +66,7 @@ The platform is pre-configured with standard benchmarks for evaluating safe navi
 - **Base:** PPO Agent (standard policy).
 - **Residual Connectors:**
     - **Static:** Fixed $k \in \{0.10, 0.15, 0.20\}$.
-    - **CARS:** Adaptive $k$ with enabled conflict, risk, and shield scaling.
+    - **CARS:** Adaptive $k$ with enabled conflict and risk scaling.
 
 ---
 

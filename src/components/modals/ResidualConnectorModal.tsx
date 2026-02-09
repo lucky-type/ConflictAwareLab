@@ -16,8 +16,6 @@ interface Props {
     adaptive_k: boolean;
     enable_k_conf: boolean;
     enable_k_risk: boolean;
-    // SHIELDING COMMENTED OUT
-    // enable_k_shield: boolean;
   }) => void;
   connector?: ResidualConnector | null;
 }
@@ -73,8 +71,6 @@ export default function ResidualConnectorModal({ open, onClose, onSave, connecto
   const [adaptiveK, setAdaptiveK] = useState<boolean>(false);
   const [enableKConf, setEnableKConf] = useState<boolean>(true);
   const [enableKRisk, setEnableKRisk] = useState<boolean>(true);
-  // SHIELDING COMMENTED OUT
-  // const [enableKShield, setEnableKShield] = useState<boolean>(true);
   const [parameters, setParameters] = useState<Record<string, any>>({});
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -100,8 +96,6 @@ export default function ResidualConnectorModal({ open, onClose, onSave, connecto
       setAdaptiveK((connector as any).adaptive_k ?? false);
       setEnableKConf((connector as any).enable_k_conf ?? true);
       setEnableKRisk((connector as any).enable_k_risk ?? true);
-      // SHIELDING COMMENTED OUT
-      // setEnableKShield((connector as any).enable_k_shield ?? true);
       setParameters(connector.parameters);
 
       // Load parent agent details
@@ -117,8 +111,6 @@ export default function ResidualConnectorModal({ open, onClose, onSave, connecto
       setAdaptiveK(false);
       setEnableKConf(true);
       setEnableKRisk(true);
-      // SHIELDING COMMENTED OUT
-      // setEnableKShield(true);
       setParameters({ ...defaultParameters.PPO });
       setSelectedAgent(null);
     }
@@ -167,8 +159,6 @@ export default function ResidualConnectorModal({ open, onClose, onSave, connecto
       adaptive_k: adaptiveK,
       enable_k_conf: enableKConf,
       enable_k_risk: enableKRisk,
-      // SHIELDING COMMENTED OUT
-      // enable_k_shield: enableKShield,
     });
   };
 
@@ -409,20 +399,6 @@ export default function ResidualConnectorModal({ open, onClose, onSave, connecto
                       <p className="text-xs text-notion-text-secondary">Reduces K when Lagrange multiplier λ is high</p>
                     </div>
                   </label>
-
-                  {/* SHIELDING COMMENTED OUT */}
-                  {/* <label className="flex items-center gap-3 rounded-lg border border-slate-700/40 bg-notion-light-gray p-2.5 cursor-pointer hover:bg-notion-light-gray transition">
-                    <input
-                      type="checkbox"
-                      checked={enableKShield}
-                      onChange={(e) => setEnableKShield(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-400"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-notion-text">K_shield (Shield-Aware)</span>
-                      <p className="text-xs text-notion-text-secondary">Reduces K when safety shield intervenes frequently</p>
-                    </div>
-                  </label> */}
                 </div>
               )}
             </div>

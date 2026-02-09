@@ -10,7 +10,6 @@ interface DashboardStats {
     reward_functions: number;
     experiments: number;
     models: number;
-    // curriculums: number;
     residual_connectors: number;
   };
   experiments_by_type: {
@@ -19,9 +18,6 @@ interface DashboardStats {
   experiments_by_status: {
     [key: string]: number;
   };
-  // curriculums_by_status: {
-  //   [key: string]: number;
-  // };
 }
 
 export default function Dashboard() {
@@ -136,20 +132,6 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
-
-        {/* <Card className="space-y-3">
-          <CardHeader title="Curriculums" />
-          <div className="flex items-center justify-between rounded-lg border border-notion-border bg-notion-light-gray p-4">
-            <div>
-              <p className="text-sm text-notion-text-secondary">Training curriculums</p>
-              <p className="text-3xl font-semibold text-notion-text">{stats.totals.curriculums}</p>
-              <p className="text-xs text-notion-text-tertiary">Progressive learning sequences</p>
-            </div>
-            <div className="rounded-lg bg-indigo-50 p-3 text-indigo-500">
-              <BookOpen className="h-8 w-8" />
-            </div>
-          </div>
-        </Card> */}
       </div>
 
       {/* Experiments by Type */}
@@ -275,37 +257,6 @@ export default function Dashboard() {
           </div>
         </div>
       </Card>
-
-      {/* Curriculum Status */}
-      {/* Curriculum Status */}
-      {/* {stats.totals.curriculums > 0 && (
-        <Card>
-          <CardHeader title="Curriculum Status" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {['Pending', 'Running', 'Paused', 'Completed', 'Failed'].map((status) => {
-              const count = stats.curriculums_by_status[status] || 0;
-              const colors = {
-                Pending: 'default',
-                Running: 'blue',
-                Paused: 'orange',
-                Completed: 'green',
-                Failed: 'red',
-              };
-              const color = colors[status as keyof typeof colors];
-
-              return (
-                <div
-                  key={status}
-                  className="rounded-lg border border-notion-border bg-notion-light-gray p-4 transition hover:bg-notion-hover"
-                >
-                  <p className="text-sm text-notion-text-secondary">{status}</p>
-                  <p className="text-2xl font-semibold text-notion-text mt-1">{count}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )} */}
 
       {/* Additional System Info */}
       <Card>

@@ -45,16 +45,11 @@ class ResidualActionWrapper(gym.Wrapper):
         # CARS: Risk component (K_risk)
         risk_alpha: float = 0.05,  # Sensitivity: tanh(alpha * lambda)
         risk_boost_max: float = 0.5,  # Max boost for risk (e.g. 0.5 = +50% -> 1.5x)
-        # SHIELDING COMMENTED OUT - CARS: Shield component (K_shield)
-        # shield_wrapper = None,  # Reference to SafetyShieldWrapper (optional)
-        # shield_beta: float = 0.5,  # Sensitivity: K_shield = 1 - beta * intervention_rate. Was 1.0 - too aggressive
         # CARS: Progress component (K_progress) - placeholder
         progress_boost: float = 1.2,  # Boost multiplier when stuck
         # CARS: Ablation control (for ablation studies)
         enable_k_conf: bool = True,  # Enable conflict-aware component
         enable_k_risk: bool = True,  # Enable risk-aware component
-        # SHIELDING COMMENTED OUT
-        # enable_k_shield: bool = True,  # Enable shield-aware component
     ):
         """
         Initialize the Residual Action Wrapper with CARS.
@@ -74,14 +69,9 @@ class ResidualActionWrapper(gym.Wrapper):
             conflict_gamma: Sigmoid steepness for K_conf transition
             risk_alpha: λ sensitivity for K_risk
             risk_boost_max: Max boost factor for K_risk (additive)
-            # SHIELDING COMMENTED OUT
-            # shield_wrapper: Optional SafetyShieldWrapper reference for K_shield
-            # shield_beta: Intervention rate sensitivity for K_shield
             progress_boost: K multiplier when base policy stuck (placeholder)
             enable_k_conf: Enable conflict-aware component (for ablation studies)
             enable_k_risk: Enable risk-aware component (for ablation studies)
-            # SHIELDING COMMENTED OUT
-            # enable_k_shield: Enable shield-aware component (for ablation studies)
         """
         super().__init__(env)
         
@@ -100,16 +90,11 @@ class ResidualActionWrapper(gym.Wrapper):
         self.conflict_gamma = conflict_gamma
         self.risk_alpha = risk_alpha
         self.risk_boost_max = risk_boost_max
-        # SHIELDING COMMENTED OUT
-        # self.shield_wrapper = shield_wrapper
-        # self.shield_beta = shield_beta
         self.progress_boost = progress_boost
 
         # CARS Ablation control
         self.enable_k_conf = enable_k_conf
         self.enable_k_risk = enable_k_risk
-        # SHIELDING COMMENTED OUT
-        # self.enable_k_shield = enable_k_shield
 
         # EMA initialization
         self.k_conf_ema_alpha = k_conf_ema_alpha
@@ -131,8 +116,6 @@ class ResidualActionWrapper(gym.Wrapper):
         if self.adaptive_k:
             print(f"[ResidualWrapper]   K_conf: {'ENABLED' if enable_k_conf else 'DISABLED'} | tau={self.conflict_tau}, gamma={self.conflict_gamma}, min_ratio={self.k_min_ratio}")
             print(f"[ResidualWrapper]   K_risk: {'ENABLED' if enable_k_risk else 'DISABLED'} | alpha={self.risk_alpha}, λ_source={'LagrangeState' if lagrange_state else 'None'}")
-            # SHIELDING COMMENTED OUT
-            # print(f"[ResidualWrapper]   K_shield: {'ENABLED' if enable_k_shield else 'DISABLED'} | beta={self.shield_beta}, shield={'Connected' if shield_wrapper else 'None'}")
             print(f"[ResidualWrapper]   K bounds: [{self.k_min}, {self.k_max}]")
         print(f"[ResidualWrapper] Base model λ (frozen): {self.base_lambda_frozen:.4f}")
         if lagrange_state:
@@ -271,15 +254,7 @@ class ResidualActionWrapper(gym.Wrapper):
                     boost = self.risk_boost_max * np.tanh(self.risk_alpha * current_lambda)
                     K_risk = 1.0 + boost
 
-            # SHIELDING COMMENTED OUT - K_shield: Safety-aware scaling from Shield interventions
-            # Higher intervention rate = residual is "destabilizing" = lower K
-            K_shield = 1.0  # Default: no scaling (shielding disabled)
-            # if self.enable_k_shield and self.shield_wrapper is not None:
-            #     shield_total_steps = getattr(self.shield_wrapper, 'total_steps', 0)
-            #     shield_interventions = getattr(self.shield_wrapper, 'intervention_count', 0)
-            #     if shield_total_steps > 0:
-            #         intervention_rate = shield_interventions / shield_total_steps
-            #         K_shield = max(0.1, 1.0 - self.shield_beta * intervention_rate)
+            K_shield = 1.0
             
             # --- K_progress: Progress-aware boost (currently fixed at 1.0) ---
             K_progress = 1.0
@@ -297,7 +272,7 @@ class ResidualActionWrapper(gym.Wrapper):
             # CARS disabled: use static k_factor
             K_conf = 1.0
             K_risk = 1.0
-            K_shield = 1.0  # SHIELDING COMMENTED OUT - always 1.0
+            K_shield = 1.0
             K_progress = 1.0
             effective_k = self.k_factor
             # Reset EMA state when disabled
@@ -358,7 +333,6 @@ class ResidualActionWrapper(gym.Wrapper):
             avg_effective_k = self._effective_k_sum / max(1, self._effective_k_count)
             
             if self.adaptive_k:
-                # SHIELDING COMMENTED OUT - removed shield from logging
                 print(f"[CARS] Step {self._step_count}: "
                       f"K={avg_effective_k:.3f} (conf={K_conf:.2f} risk={K_risk:.2f}), "
                       f"conflict_rate={conflict_rate:.1f}%")
@@ -388,8 +362,6 @@ class ResidualActionWrapper(gym.Wrapper):
             # CARS components
             'K_conf': K_conf,
             'K_risk': K_risk,
-            # SHIELDING COMMENTED OUT
-            # 'K_shield': K_shield,
             'K_progress': K_progress,
             'cars_enabled': self.adaptive_k,
         }

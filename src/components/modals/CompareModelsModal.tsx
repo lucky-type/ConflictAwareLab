@@ -33,14 +33,14 @@ interface Props {
 }
 
 const MODEL_COLORS = [
-  '#00ffff', // Cyan
-  '#ff00ff', // Magenta
-  '#ffff00', // Yellow
-  '#00ff00', // Green
-  '#ff8800', // Orange
-  '#8800ff', // Purple
-  '#ff0088', // Pink
-  '#88ff00', // Lime
+  '#6366f1', // Indigo
+  '#f59e0b', // Amber
+  '#10b981', // Emerald
+  '#ec4899', // Pink
+  '#8b5cf6', // Violet
+  '#14b8a6', // Teal
+  '#f97316', // Orange
+  '#06b6d4', // Cyan
 ];
 
 export default function CompareModelsModal({ open, onClose, snapshots }: Props) {
@@ -158,7 +158,7 @@ export default function CompareModelsModal({ open, onClose, snapshots }: Props) 
         display: true,
         position: 'top' as const,
         labels: {
-          color: '#fff',
+          color: '#374151',
           font: {
             size: 11,
           },

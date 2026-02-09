@@ -3,7 +3,7 @@ import sqlalchemy
 from app.database import engine, Base
 from app.models import (
     Environment, Agent, ResidualConnector, RewardFunction, 
-    Experiment, ModelSnapshot, ExperimentMetric #, Curriculum, CurriculumStep
+    Experiment, ModelSnapshot, ExperimentMetric
 )
 
 def init_db():

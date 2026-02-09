@@ -85,8 +85,6 @@ class ExperimentCallback(BaseCallback):
         # NEW: CARS K components for charting
         self.k_conf_values = []    # K_conf (conflict-aware)
         self.k_risk_values = []    # K_risk (λ-based)
-        # SHIELDING COMMENTED OUT
-        # self.k_shield_values = []  # K_shield (shield intervention-based)
         
         # Cache for algorithm-specific metrics (captured during training)
         self.last_train_metrics = {}
@@ -101,13 +99,6 @@ class ExperimentCallback(BaseCallback):
         # Best model tracking (for catastrophic forgetting protection)
         self.best_success_rate = 0.0
         self.last_avg_cost = 0.0  # For smooth graphs (avoid spiky zeros)
-        
-        # SHIELDING COMMENTED OUT
-        # Safety Shield metrics
-        # self.episode_shield_interventions = []  # Shield intervention count per episode
-        # self.episode_shield_interventions_per_env = None  # Per-env intervention counter
-        # self.total_shield_interventions = 0
-        # self.total_shield_steps = 0
     
     def _on_training_start(self) -> None:
         """Called when training starts - hook into logger"""
@@ -128,8 +119,6 @@ class ExperimentCallback(BaseCallback):
             # New: Per-env tracking for near-misses and danger time
             self.episode_cum_near_misses = [0] * num_envs
             self.episode_cum_danger = [0] * num_envs
-            # SHIELDING COMMENTED OUT
-            # self.episode_shield_interventions_per_env = [0] * num_envs
             print(f"[Callback] Initialized {num_envs} environment(s) with per-env tracking buffers")
         else:
             print(f"[Callback] Preserving existing buffers across training chunk (num_envs={num_envs})")
@@ -216,9 +205,6 @@ class ExperimentCallback(BaseCallback):
                     self.k_conf_values.append(res_info["K_conf"])
                 if "K_risk" in res_info:
                     self.k_risk_values.append(res_info["K_risk"])
-                # SHIELDING COMMENTED OUT
-                # if "K_shield" in res_info:
-                #     self.k_shield_values.append(res_info["K_shield"])
                 
                 # Check for significant intervention
                 res_norm = res_info.get("residual_magnitude", 0.0)
@@ -269,13 +255,6 @@ class ExperimentCallback(BaseCallback):
                         if min_drone_dist < danger_thresh:
                             self.episode_cum_danger[env_idx] += 1
                     
-                    # SHIELDING COMMENTED OUT
-                    # Track shield interventions
-                    # if env_info.get('shield_intervention', False):
-                    #     self.episode_shield_interventions_per_env[env_idx] += 1
-                    #     self.total_shield_interventions += 1
-                    # self.total_shield_steps += 1
-                    
                     # Record metrics when each environment finishes to capture per-env episodes.
                     if env_done:
                         self.episode_count += 1
@@ -308,9 +287,6 @@ class ExperimentCallback(BaseCallback):
                         
                         self.episode_costs.append(cumulative_cost)
                         
-                        # SHIELDING COMMENTED OUT
-                        # self.episode_shield_interventions.append(self.episode_shield_interventions_per_env[env_idx])
-                        
                         # Save accumulated metrics
                         self.episode_near_misses.append(float(self.episode_cum_near_misses[env_idx]))
                         self.episode_danger_time.append(float(self.episode_cum_danger[env_idx]))
@@ -322,8 +298,6 @@ class ExperimentCallback(BaseCallback):
                         self.episode_lengths_per_env[env_idx] = 0
                         self.episode_cum_near_misses[env_idx] = 0
                         self.episode_cum_danger[env_idx] = 0
-                        # SHIELDING COMMENTED OUT
-                        # self.episode_shield_interventions_per_env[env_idx] = 0
             
             # For backward compatibility, ALSO track primary environment (env 0) in legacy accumulators
             # This supports visualization/trajectory recording which currently expects env 0 only
@@ -786,26 +760,6 @@ class ExperimentCallback(BaseCallback):
             metrics["danger_time_mean"] = 0.0
             metrics["violation_rate"] = 0.0
         
-        # SHIELDING COMMENTED OUT
-        # Safety Shield metrics (always add these regardless of episode_costs)
-        # if len(self.episode_shield_interventions) > 0:
-        #     recent_shield = self.episode_shield_interventions[-window_size:]
-        #     recent_lengths = self.episode_lengths[-window_size:] if len(self.episode_lengths) > 0 else [1]
-        #
-        #     # Calculate intervention rate as percentage of steps with intervention
-        #     total_interventions = sum(recent_shield)
-        #     total_steps = sum(recent_lengths) if len(recent_lengths) == len(recent_shield) else max(1, len(recent_shield))
-        #     shield_rate = (total_interventions / max(1, total_steps)) * 100.0
-        #
-        #     metrics["shield_intervention_rate"] = round(shield_rate, 2)
-        #     metrics["shield_interventions_per_episode"] = float(np.mean(recent_shield))
-        # else:
-        #     # Use global counters if no episode data yet
-        #     if self.total_shield_steps > 0:
-        #         metrics["shield_intervention_rate"] = round((self.total_shield_interventions / self.total_shield_steps) * 100.0, 2)
-        #     else:
-        #         metrics["shield_intervention_rate"] = 0.0
-        #     metrics["shield_interventions_per_episode"] = 0.0
         metrics["shield_intervention_rate"] = 0.0
         metrics["shield_interventions_per_episode"] = 0.0
 
@@ -988,14 +942,7 @@ class ExperimentCallback(BaseCallback):
         else:
             metrics["k_risk_mean"] = 1.0  # Default when no λ
         
-        # SHIELDING COMMENTED OUT
-        # if len(self.k_shield_values) > 0:
-        #     metrics["k_shield_mean"] = float(np.mean(self.k_shield_values))
-        #     self.logger.record("cars/k_shield", metrics["k_shield_mean"])
-        #     self.k_shield_values = []
-        # else:
-        #     metrics["k_shield_mean"] = 1.0  # Default when no shield
-        metrics["k_shield_mean"] = 1.0  # SHIELDING COMMENTED OUT - always default
+        metrics["k_shield_mean"] = 1.0
 
     def _save_metrics_to_db(self, metrics: dict):
         """Save metrics to database."""

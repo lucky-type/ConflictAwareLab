@@ -76,8 +76,6 @@ export interface ResidualConnector {
   adaptive_k: boolean;  // Enable adaptive K-factor (CARS)
   enable_k_conf: boolean;  // CARS: Enable conflict-aware component
   enable_k_risk: boolean;  // CARS: Enable risk-aware component
-  // SHIELDING COMMENTED OUT
-  // enable_k_shield: boolean;  // CARS: Enable shield-aware component
   is_locked: boolean;
   created_at: string;
   parent_agent?: Agent;
@@ -93,8 +91,6 @@ export interface ResidualConnectorCreate {
   adaptive_k?: boolean;  // Enable adaptive K-factor (CARS) (default: false)
   enable_k_conf?: boolean;  // CARS: Enable conflict-aware component (default: true)
   enable_k_risk?: boolean;  // CARS: Enable risk-aware component (default: true)
-  // SHIELDING COMMENTED OUT
-  // enable_k_shield?: boolean;  // CARS: Enable shield-aware component (default: true)
 }
 
 export interface RewardFunction {
@@ -141,11 +137,6 @@ export interface SafetyConstraintConfig {
   wall_near_miss_weight: number;
   wall_danger_zone_weight: number;
   wall_near_miss_threshold: number;
-  // SHIELDING COMMENTED OUT
-  // Safety Shield (runtime action filtering)
-  // shield_enabled?: boolean;
-  // shield_threshold?: number;
-  // shield_fallback_strength?: number;
 }
 
 export interface Experiment {
@@ -232,9 +223,6 @@ export interface TrainingMetrics {
   near_miss_mean: number;
   danger_time_mean: number;
   violation_rate: number;  // Percentage
-  // SHIELDING COMMENTED OUT
-  // shield_intervention_rate?: number;  // Percentage of steps with shield intervention
-  // shield_interventions_per_episode?: number;  // Avg shield interventions per episode
 
   // C) Lagrangian Dynamics
   lambda: number;
@@ -277,8 +265,7 @@ export interface TrainingMetrics {
   // J) CARS K Components
   k_conf_mean?: number;   // Conflict-aware K component
   k_risk_mean?: number;   // Risk (\u03bb-based) K component
-  // SHIELDING COMMENTED OUT
-  // k_shield_mean?: number; // Shield intervention K component
+
 }
 
 export interface ExperimentProgress {
@@ -334,58 +321,6 @@ export interface JobCapacity {
   available_slots: number;
   can_start_new: boolean;
 }
-
-// // ==================== Curriculum Learning ====================
-// export type CurriculumStatus = 'Pending' | 'Running' | 'Paused' | 'Completed' | 'Failed';
-// export type CurriculumStepType = 'training' | 'fine_tuning' | 'residual';
-
-// export interface CurriculumStepConfig {
-//   env_id: number;
-//   agent_id?: number;
-//   residual_connector_id?: number;
-//   reward_id: number;
-//   total_steps: number;
-//   snapshot_freq: number;
-//   max_ep_length: number;
-// }
-
-// export interface CurriculumStep {
-//   id: number;
-//   curriculum_id: number;
-//   order: number;
-//   step_type: CurriculumStepType;
-//   config: CurriculumStepConfig;
-//   safety_config?: SafetyConstraintConfig;
-//   target_success_rate: number;
-//   min_episodes: number;
-//   is_completed: boolean;
-// }
-
-// export interface CurriculumStepCreate {
-//   order: number;
-//   step_type: CurriculumStepType;
-//   config: CurriculumStepConfig;
-//   safety_config?: SafetyConstraintConfig;
-//   target_success_rate: number;
-//   min_episodes: number;
-// }
-
-// export interface Curriculum {
-//   id: number;
-//   name: string;
-//   description?: string;
-//   status: CurriculumStatus;
-//   current_step_order: number;
-//   created_at: string;
-//   updated_at?: string;
-//   steps: CurriculumStep[];
-// }
-
-// export interface CurriculumCreate {
-//   name: string;
-//   description?: string;
-//   steps: CurriculumStepCreate[];
-// }
 
 // ==================== API Client ====================
 class ApiClient {
@@ -664,40 +599,6 @@ class ApiClient {
   async getJobCapacity(): Promise<JobCapacity> {
     return this.request('/job-capacity');
   }
-
-  // // ==================== Curriculums ====================
-  // async getCurriculums(): Promise<Curriculum[]> {
-  //   return this.request('/curriculums');
-  // }
-
-  // async getCurriculum(id: number): Promise<Curriculum> {
-  //   return this.request(`/curriculums/${id}`);
-  // }
-
-  // async createCurriculum(data: CurriculumCreate): Promise<Curriculum> {
-  //   return this.request('/curriculums', {
-  //     method: 'POST',
-  //     body: JSON.stringify(data),
-  //   });
-  // }
-
-  // async startCurriculum(id: number): Promise<{ status: string; message: string }> {
-  //   return this.request(`/curriculums/${id}/start`, {
-  //     method: 'POST',
-  //   });
-  // }
-
-  // async pauseCurriculum(id: number): Promise<{ status: string; message: string }> {
-  //   return this.request(`/curriculums/${id}/pause`, {
-  //     method: 'POST',
-  //   });
-  // }
-
-  // async deleteCurriculum(id: number): Promise<{ status: string }> {
-  //   return this.request(`/curriculums/${id}`, {
-  //     method: 'DELETE',
-  //   });
-  // }
 
   // ==================== Trajectory & Replay ====================
   async getExperimentTrajectory(experimentId: number): Promise<{

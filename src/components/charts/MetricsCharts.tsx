@@ -63,11 +63,6 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
       violation_rate: p.metrics.violation_rate || 0,
       near_miss_mean: p.metrics.near_miss_mean || 0,
       danger_time_mean: p.metrics.danger_time_mean || 0,
-      // SHIELDING COMMENTED OUT
-      // shield_intervention_rate: p.metrics.shield_intervention_rate || 0,
-      // shield_interventions_per_episode: p.metrics.shield_interventions_per_episode || 0,
-      shield_intervention_rate: 0,
-      shield_interventions_per_episode: 0,
 
       // Lagrangian
       lambda: p.metrics.lambda || 0,
@@ -101,12 +96,9 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
       intervention_rate: p.metrics.intervention_rate || 0,
       effective_k_mean: p.metrics.effective_k_mean || 0,
 
-      // NEW: CARS K Components
+      // CARS K Components
       k_conf: p.metrics.k_conf_mean || 1,
       k_risk: p.metrics.k_risk_mean || 1,
-      // SHIELDING COMMENTED OUT
-      // k_shield: p.metrics.k_shield_mean || 1,
-      k_shield: 1,
     }));
   }, [progressHistory]);
 
@@ -152,16 +144,12 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
   const hasResidualMetrics = chartData.some(d => d.residual_correction > 0 || d.residual_base > 0 || d.residual_ratio > 0 || d.residual_contribution > 0);
 
   // Check if CARS data is available (any K component != 1.0 or effective_k != 0)
-  // SHIELDING COMMENTED OUT - removed k_shield check
   const hasCARSMetrics = chartData.some(d =>
     d.effective_k_mean > 0 || d.k_conf !== 1 || d.k_risk !== 1
   );
 
   // Check if any safety data exists
-  // SHIELDING COMMENTED OUT - removed shield checks
   const hasShieldData = chartData.some(d =>
-    // d.shield_intervention_rate > 0 ||
-    // d.shield_interventions_per_episode > 0 ||
     d.cost_mean > 0 ||
     d.violation_rate > 0
   );
@@ -264,12 +252,8 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
             <MetricDisplay label="Mean Episode Cost" value={getLatestMetric('cost_mean').toFixed(4)} color="rose" />
             <MetricDisplay label="Violation Rate" value={`${getLatestMetric('violation_rate').toFixed(1)}%`} color="orange" />
-            {/* SHIELDING COMMENTED OUT */}
-            {/* <MetricDisplay label="Shield Intervention" value={`${getLatestMetric('shield_intervention_rate').toFixed(1)}%`} color="green" /> */}
             <MetricDisplay label="Near-Misses (avg)" value={getLatestMetric('near_miss_mean').toFixed(4)} color="yellow" />
             <MetricDisplay label="Danger Time (avg)" value={getLatestMetric('danger_time_mean').toFixed(4)} color="yellow" />
-            {/* SHIELDING COMMENTED OUT */}
-            {/* <MetricDisplay label="Shield/Episode" value={getLatestMetric('shield_interventions_per_episode').toFixed(1)} color="emerald" /> */}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -305,8 +289,6 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
                 xAxisKey: useEpisodes ? "episode" : "step",
                 lines: [
                   { dataKey: "violation_rate", stroke: "#fb923c", name: "Violation %" },
-                  // SHIELDING COMMENTED OUT
-                  // { dataKey: "shield_intervention_rate", stroke: "#22c55e", name: "Shield %" }
                 ]
               }}
             >
@@ -321,8 +303,6 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
                   />
                   <Legend wrapperStyle={{ fontSize: '11px' }} />
                   <Line type="monotone" dataKey="violation_rate" stroke="#fb923c" strokeWidth={2} dot={false} name="Violation %" />
-                  {/* SHIELDING COMMENTED OUT */}
-                  {/* <Line type="monotone" dataKey="shield_intervention_rate" stroke="#22c55e" strokeWidth={2} dot={false} name="Shield %" /> */}
                 </LineChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -522,12 +502,10 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
           expanded={expandedSections.has('cars')}
           onToggle={() => toggleSection('cars')}
         >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
             <MetricDisplay label="K effective" value={getLatestMetric('effective_k_mean').toFixed(4)} color="cyan" />
             <MetricDisplay label="K conf" value={getLatestMetric('k_conf').toFixed(3)} color="rose" />
             <MetricDisplay label="K risk" value={getLatestMetric('k_risk').toFixed(3)} color="amber" />
-            {/* SHIELDING COMMENTED OUT */}
-            {/* <MetricDisplay label="K shield" value={getLatestMetric('k_shield').toFixed(3)} color="emerald" /> */}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -554,8 +532,6 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
                 lines: [
                   { dataKey: "k_conf", stroke: "#f43f5e", name: "K_conf (conflict)" },
                   { dataKey: "k_risk", stroke: "#f59e0b", name: "K_risk (λ)" },
-                  // SHIELDING COMMENTED OUT
-                  // { dataKey: "k_shield", stroke: "#10b981", name: "K_shield (interventions)" }
                 ],
                 yAxisDomain: [0, 1.1],
                 referenceLines: [{ y: 1, stroke: "#475569", strokeDasharray: "3 3" }]
@@ -574,8 +550,6 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
                   <ReferenceLine y={1} stroke="#475569" strokeDasharray="3 3" />
                   <Line type="monotone" dataKey="k_conf" stroke="#f43f5e" strokeWidth={2} dot={false} name="K_conf (conflict)" />
                   <Line type="monotone" dataKey="k_risk" stroke="#f59e0b" strokeWidth={2} dot={false} name="K_risk (λ)" />
-                  {/* SHIELDING COMMENTED OUT */}
-                  {/* <Line type="monotone" dataKey="k_shield" stroke="#10b981" strokeWidth={2} dot={false} name="K_shield (interventions)" /> */}
                 </LineChart>
               </ResponsiveContainer>
             </ChartContainer>

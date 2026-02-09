@@ -126,8 +126,6 @@ class ResidualConnector(Base):
     # CARS Ablation: Individual component toggles (for ablation studies)
     enable_k_conf = Column(Boolean, nullable=False, default=True)    # Enable conflict-aware scaling
     enable_k_risk = Column(Boolean, nullable=False, default=True)    # Enable risk-aware scaling (Lagrange λ)
-    # SHIELDING COMMENTED OUT
-    # enable_k_shield = Column(Boolean, nullable=False, default=True)  # Enable shield-aware scaling
 
     # Locking mechanism
     is_locked = Column(Boolean, default=False, nullable=False)

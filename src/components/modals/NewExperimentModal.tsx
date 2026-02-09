@@ -69,13 +69,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
   const [warmupEpisodes, setWarmupEpisodes] = useState<number>(0);
   const [warmupSchedule, setWarmupSchedule] = useState<string>('exponential');
 
-  // SHIELDING COMMENTED OUT
-  // Safety Shield states (independent from Lagrangian)
-  // const [shieldEnabled, setShieldEnabled] = useState<boolean>(false);
-  // const [shieldThreshold, setShieldThreshold] = useState<number>(0.3);
-  // const [shieldWallThreshold, setShieldWallThreshold] = useState<number>(0.1);
-  // const [shieldFallbackStrength, setShieldFallbackStrength] = useState<number>(0.8);
-
   // Local state mirrors cached data for form interactions
   const [agents, setAgents] = useState<Agent[]>([]);
   const [rewardFunctions, setRewardFunctions] = useState<RewardFunction[]>([]);
@@ -274,7 +267,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
         };
 
         // Add safety constraint parameters if enabled (Lagrangian)
-        // SHIELDING COMMENTED OUT - removed shieldEnabled check
         if (safetyConstraintEnabled) {
           trainingConfig.safety_constraint = {
             enabled: safetyConstraintEnabled,
@@ -294,10 +286,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
             wall_near_miss_weight: wallNearMissWeight,
             wall_danger_zone_weight: wallDangerZoneWeight,
             wall_near_miss_threshold: wallNearMissThreshold,
-            // SHIELDING COMMENTED OUT
-            // shield_enabled: shieldEnabled,
-            // shield_threshold: shieldThreshold,
-            // shield_fallback_strength: shieldFallbackStrength
           };
         }
 
@@ -350,11 +338,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           target_lambda: targetLambda,
           warmup_episodes: warmupEpisodes,
           warmup_schedule: warmupSchedule,
-          // SHIELDING COMMENTED OUT
-          // shield_enabled: shieldEnabled,
-          // shield_threshold: shieldThreshold,
-          // shield_wall_threshold: shieldWallThreshold,
-          // shield_fallback_strength: shieldFallbackStrength
         };
 
         createdExperiment = await api.createExperiment(residualConfig);
@@ -383,7 +366,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
         };
 
         // Add safety constraint parameters if enabled (Lagrangian)
-        // SHIELDING COMMENTED OUT - removed shieldEnabled check
         if (safetyConstraintEnabled) {
           fineTuningConfig.safety_constraint = {
             enabled: safetyConstraintEnabled,
@@ -403,10 +385,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
             wall_near_miss_weight: wallNearMissWeight,
             wall_danger_zone_weight: wallDangerZoneWeight,
             wall_near_miss_threshold: wallNearMissThreshold,
-            // SHIELDING COMMENTED OUT
-            // shield_enabled: shieldEnabled,
-            // shield_threshold: shieldThreshold,
-            // shield_fallback_strength: shieldFallbackStrength
           };
         }
 
@@ -446,18 +424,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           evaluationConfig.training_mode = 'standard';
           evaluationConfig.model_snapshot_id = evaluationBaseModelId;
         }
-
-        // SHIELDING COMMENTED OUT
-        // Add safety constraint parameters if Shield is enabled
-        // if (shieldEnabled) {
-        //   evaluationConfig.safety_constraint = {
-        //     enabled: false, // Lagrangian safety not active during evaluation unless specified
-        //     shield_enabled: shieldEnabled,
-        //     shield_threshold: shieldThreshold,
-        //     shield_wall_threshold: shieldWallThreshold,
-        //     shield_fallback_strength: shieldFallbackStrength
-        //   };
-        // }
 
         createdExperiment = await api.createExperiment(evaluationConfig);
       } else {
@@ -1352,77 +1318,6 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
                   )}
                 </div>
               )}
-
-              {/* SHIELDING COMMENTED OUT - Safety Shield Section */}
-              {/* {tab !== 'Simulation' && (
-                <div className={`rounded-xl border p-4 transition-all ${shieldEnabled ? 'border-green-500/50 bg-green-50 ring-1 ring-green-500/30' : 'border-notion-border bg-slate-50'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-semibold text-notion-text flex items-center gap-2">
-                      🛡️ Safety Shield
-                      <span className="text-[10px] font-normal text-notion-text-tertiary">(Runtime Protection)</span>
-                    </span>
-                    <label className="relative inline-flex cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={shieldEnabled}
-                        onChange={(e) => setShieldEnabled(e.target.checked)}
-                      />
-                      <div className="peer h-5 w-9 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-green-500 peer-checked:after:translate-x-full peer-focus:outline-none"></div>
-                    </label>
-                  </div>
-
-                  <p className="text-xs text-notion-text-secondary mb-3">
-                    Runtime filter that blocks dangerous actions based on LIDAR. Works independently of Lagrangian constraints.
-                  </p>
-
-                  {shieldEnabled && (
-                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="space-y-1">
-                          <span className="text-notion-text-secondary text-xs">Drone Threshold</span>
-                          <input
-                            type="number"
-                            step="0.05"
-                            min="0.1"
-                            max="0.9"
-                            value={shieldThreshold}
-                            onChange={(e) => setShieldThreshold(parseFloat(e.target.value))}
-                            className="w-full rounded-lg border border-slate-700 bg-notion-hover px-2 py-1.5 text-notion-text focus:border-green-400 text-sm"
-                          />
-                          <p className="text-[9px] text-notion-text-tertiary">LIDAR distance to trigger for drones (0.3 default)</p>
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-notion-text-secondary text-xs">Wall Threshold</span>
-                          <input
-                            type="number"
-                            step="0.05"
-                            min="0.05"
-                            max="0.5"
-                            value={shieldWallThreshold}
-                            onChange={(e) => setShieldWallThreshold(parseFloat(e.target.value))}
-                            className="w-full rounded-lg border border-slate-700 bg-notion-hover px-2 py-1.5 text-notion-text focus:border-green-400 text-sm"
-                          />
-                          <p className="text-[9px] text-notion-text-tertiary">LIDAR distance to trigger for walls (0.1 default)</p>
-                        </label>
-                      </div>
-                      <label className="space-y-1">
-                        <span className="text-notion-text-secondary text-xs">Retreat Strength</span>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0.1"
-                          max="1.0"
-                          value={shieldFallbackStrength}
-                          onChange={(e) => setShieldFallbackStrength(parseFloat(e.target.value))}
-                          className="w-full rounded-lg border border-slate-700 bg-notion-hover px-2 py-1.5 text-notion-text focus:border-green-400 text-sm"
-                        />
-                        <p className="text-[9px] text-notion-text-tertiary">How fast to retreat (0.8 default)</p>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )} */}
             </div>
 
             <div className="col-span-2 flex justify-end gap-3 pt-4">

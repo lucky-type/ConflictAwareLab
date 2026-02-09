@@ -33,12 +33,6 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
-    
-    # Set the main event loop for the curriculum orchestrator
-    # from .background_jobs import curriculum_orchestrator
-    # loop = asyncio.get_event_loop()
-    # curriculum_orchestrator.main_loop = loop
-    # print(f"[Startup] Set main event loop for curriculum orchestrator: {type(loop)}")
 
 
 # ------------------------------ Helper Functions ------------------------------ #

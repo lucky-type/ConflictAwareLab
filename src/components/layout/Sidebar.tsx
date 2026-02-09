@@ -4,7 +4,6 @@ import {
   Beaker,
   Brain,
   Gauge,
-  GraduationCap,
   Layers3,
   LayoutDashboard,
   Network,
@@ -23,7 +22,6 @@ const links = [
   { to: '/reward-functions', label: 'Reward Functions', icon: Gauge },
   { to: '/models', label: 'Models', icon: Package },
   { to: '/experiments', label: 'Experiments', icon: Beaker },
-  // { to: '/curriculum', label: 'Curriculum', icon: GraduationCap },
 ];
 
 export default function Sidebar() {

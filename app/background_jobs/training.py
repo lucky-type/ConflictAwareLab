@@ -300,34 +300,6 @@ class TrainingMixin:
         else:
             print(f"\n[Training] Safety Constraint DISABLED")
             lagrange_state = LagrangeState(lam=0.0)
-        
-        # SHIELDING COMMENTED OUT
-        # Wrapper order keeps the Shield ahead of residual so it sees the combined action.
-        # Order: DroneSwarmEnv → SafetyShieldWrapper → ResidualActionWrapper → AppendLambdaWrapper
-        # This ensures Shield intercepts the final action before it reaches the environment.
-
-        # Add Safety Shield FIRST if enabled (before ResidualActionWrapper)
-        # This way Shield sees the combined action, not raw residual actions
-        # shield_enabled = safety_config and isinstance(safety_config, dict) and safety_config.get('shield_enabled', False)
-        shield_wrapper = None  # Store reference for CARS K_shield (always None now)
-        # if shield_enabled:
-        #     from ..safety_shield import SafetyShieldWrapper
-        #
-        #     # Shield wraps DroneSwarmEnv directly, so obs has NO lambda appended yet
-        #     # Observation structure: [goal_dir(3), dist(1), vel(3), LIDAR(N)]
-        #     base_features = 7  # goal_dir(3) + dist(1) + vel(3)
-        #     lidar_start = base_features  # No lambda at this point
-        #     num_lidar = agent.lidar_rays if hasattr(agent, 'lidar_rays') else 72
-        #
-        #     shield_wrapper = SafetyShieldWrapper(
-        #         env,
-        #         threshold=safety_config.get('shield_threshold', 0.3),
-        #         wall_threshold=safety_config.get('shield_wall_threshold', 0.1),
-        #         fallback_strength=safety_config.get('shield_fallback_strength', 0.8),
-        #         lidar_start_idx=lidar_start,
-        #         num_lidar_rays=num_lidar,
-        #         verbose=1
-        #     )
         #     env = shield_wrapper  # Also update env chain
         #     print(f"[Training] SafetyShield ENABLED (drone_threshold={safety_config.get('shield_threshold', 0.3)}, wall_threshold={safety_config.get('shield_wall_threshold', 0.1)}, lidar_start={lidar_start})")
         #     print(f"[Training] SafetyShield wraps DroneSwarmEnv BEFORE ResidualActionWrapper (sees combined action)")
@@ -400,8 +372,6 @@ class TrainingMixin:
         adaptive_k = False  # Default
         enable_k_conf = True  # Default
         enable_k_risk = True  # Default
-        # SHIELDING COMMENTED OUT
-        # enable_k_shield = True  # Default
         if residual_connector_id:
             residual_connector = crud.get_entity(db, db_models.ResidualConnector, residual_connector_id)
             if residual_connector:
@@ -409,12 +379,9 @@ class TrainingMixin:
                 adaptive_k = getattr(residual_connector, 'adaptive_k', False)
                 enable_k_conf = getattr(residual_connector, 'enable_k_conf', True)
                 enable_k_risk = getattr(residual_connector, 'enable_k_risk', True)
-                # SHIELDING COMMENTED OUT
-                # enable_k_shield = getattr(residual_connector, 'enable_k_shield', True)
                 print(f"[Training] K-factor: {k_factor} (from ResidualConnector)")
                 print(f"[Training] Adaptive K: {adaptive_k}")
                 if adaptive_k:
-                    # SHIELDING COMMENTED OUT - removed K_shield from log
                     print(f"[Training] CARS Ablation: K_conf={enable_k_conf}, K_risk={enable_k_risk}")
 
         # Wrap environment with ResidualActionWrapper (with CARS integration)
@@ -427,16 +394,11 @@ class TrainingMixin:
             base_lambda_frozen=base_model_lambda,  # Frozen lambda for base model
             k_factor=k_factor,
             adaptive_k=adaptive_k,
-            # SHIELDING COMMENTED OUT - CARS: Shield integration for K_shield
-            # shield_wrapper=shield_wrapper,
             # CARS: Ablation control
             enable_k_conf=enable_k_conf,
             enable_k_risk=enable_k_risk,
-            # SHIELDING COMMENTED OUT
-            # enable_k_shield=enable_k_shield,
         )
         if adaptive_k:
-            # SHIELDING COMMENTED OUT - removed shield from log
             print(f"[Training] CARS enabled")
         print(f"[Training] Environment wrapped with ResidualActionWrapper")
         
@@ -693,6 +655,10 @@ class TrainingMixin:
         # Training loop with pause support
         total_steps = experiment.total_steps or 100000
         chunk_size = 1000
+        # For on-policy algorithms (PPO, A2C), chunk_size must be >= n_steps
+        # otherwise SB3 collects n_steps anyway, causing progress overshoot
+        if hasattr(model, 'n_steps'):
+            chunk_size = max(chunk_size, model.n_steps)
         print(f"[Training Loop] Starting with total_steps={total_steps}, chunk_size={chunk_size}")
 
         # Get the actual ExperimentCallback for trajectory access

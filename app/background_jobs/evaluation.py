@@ -34,8 +34,6 @@ class EvaluationMixin:
         effective_k_values=None,
         k_conf_values=None,
         k_risk_values=None,
-        # SHIELDING COMMENTED OUT
-        # k_shield_values=None,
         window_size=None,
     ):
         """Calculate comprehensive metrics matching training callback format."""
@@ -159,19 +157,6 @@ class EvaluationMixin:
                 "epsilon": safety_config.get('risk_budget', 0.3) if safety_config and safety_config.get('enabled', False) else 0.0,
             })
         
-        # SHIELDING COMMENTED OUT - C) SafetyShield Metrics
-        # if len(recent_shield_interventions) > 0 and len(recent_lengths) > 0:
-        #     total_interventions = sum(recent_shield_interventions)
-        #     total_steps = sum(recent_lengths)
-        #
-        #     if total_steps > 0:
-        #         shield_rate = (total_interventions / total_steps) * 100.0
-        #         metrics["shield_intervention_rate"] = round(shield_rate, 2)
-        #     else:
-        #         metrics["shield_intervention_rate"] = 0.0
-        #
-        #     metrics["shield_interventions_per_episode"] = float(np.mean(recent_shield_interventions))
-        # else:
         metrics["shield_intervention_rate"] = 0.0
         metrics["shield_interventions_per_episode"] = 0.0
         
@@ -246,10 +231,6 @@ class EvaluationMixin:
         else:
             metrics["k_risk_mean"] = 1.0
         
-        # SHIELDING COMMENTED OUT
-        # if k_shield_values and len(k_shield_values) > 0:
-        #     metrics["k_shield_mean"] = float(np.mean(k_shield_values))
-        # else:
         metrics["k_shield_mean"] = 1.0
         
         # F) Algorithm-specific metrics (not available in evaluation, but set for compatibility)
@@ -497,40 +478,14 @@ class EvaluationMixin:
             else:
                 safety_config_dict = {}
             
-            # SHIELDING COMMENTED OUT
-            # shield_enabled = safety_config_dict.get('shield_enabled', False)
-            shield_enabled = False  # Shielding disabled
+            shield_enabled = False
 
             print(f"\n[Evaluation] === Safety Shield Configuration Check ===")
-            print(f"[Evaluation] shield_enabled result: {shield_enabled} (SHIELDING COMMENTED OUT)")
+            print(f"[Evaluation] shield_enabled result: {shield_enabled}")
             print(f"[Evaluation] ==========================================\n")
 
-            # SHIELDING COMMENTED OUT - STEP 1: Apply SafetyShield FIRST (if enabled)
-            # This ensures Shield sees the COMBINED action (base + K * residual)
-            shield_wrapper = None  # Store reference for CARS K_shield (always None now)
-            # if shield_enabled:
-            #     from ..safety_shield import SafetyShieldWrapper
-            #
-            #     # Shield wraps DroneSwarmEnv directly, so obs has NO lambda appended yet
-            #     # Observation structure: [goal_dir(3), dist(1), vel(3), LIDAR(N)]
-            #     base_features = 7  # goal_dir(3) + dist(1) + vel(3)
-            #     lidar_start = base_features  # No lambda at this point
-            #     num_lidar = training_agent.lidar_rays if hasattr(training_agent, 'lidar_rays') else 72
-            #
-            #     shield_wrapper = SafetyShieldWrapper(
-            #         env,
-            #         threshold=safety_config_dict.get('shield_threshold', 0.3),
-            #         wall_threshold=safety_config_dict.get('shield_wall_threshold', 0.1),
-            #         fallback_strength=safety_config_dict.get('shield_fallback_strength', 0.8),
-            #         lidar_start_idx=lidar_start,
-            #         num_lidar_rays=num_lidar,
-            #         verbose=1
-            #     )
-            #     env = shield_wrapper  # Also update env chain
-            #     print(f"[Evaluation] ✅ SafetyShield ENABLED (drone_threshold={safety_config_dict.get('shield_threshold', 0.3)}, wall_threshold={safety_config_dict.get('shield_wall_threshold', 0.1)}, lidar_start={lidar_start})")
-            #     print(f"[Evaluation] SafetyShield wraps DroneSwarmEnv BEFORE ResidualActionWrapper (sees combined action)")
-            # else:
-            print(f"[Evaluation] ❌ SafetyShield DISABLED (SHIELDING COMMENTED OUT)")
+            shield_wrapper = None
+            print(f"[Evaluation] ❌ SafetyShield DISABLED")
             
             # STEP 2: Apply ResidualActionWrapper (if in residual mode) - AFTER Shield
             if experiment.training_mode == "residual" and residual_snapshot_id:
@@ -587,15 +542,10 @@ class EvaluationMixin:
                 adaptive_k = getattr(residual_connector, 'adaptive_k', False)
                 enable_k_conf = getattr(residual_connector, 'enable_k_conf', True)
                 enable_k_risk = getattr(residual_connector, 'enable_k_risk', True)
-                # SHIELDING COMMENTED OUT
-                # enable_k_shield = getattr(residual_connector, 'enable_k_shield', True)
                 print(f"[Evaluation] K-factor: {k_factor}, Adaptive K: {adaptive_k}")
                 if adaptive_k:
-                    # SHIELDING COMMENTED OUT - removed K_shield from log
                     print(f"[Evaluation] CARS Ablation: K_conf={enable_k_conf}, K_risk={enable_k_risk}")
 
-                # Wrap environment with ResidualActionWrapper (AFTER Shield, so Shield sees combined action)
-                # SHIELDING COMMENTED OUT - CARS integration for K_shield
                 env = ResidualActionWrapper(
                     env=env,
                     base_model_path=base_snapshot.file_path,
@@ -604,16 +554,11 @@ class EvaluationMixin:
                     base_lambda_frozen=base_model_lambda,
                     k_factor=k_factor,
                     adaptive_k=adaptive_k,
-                    # SHIELDING COMMENTED OUT - CARS: Shield integration for K_shield
-                    # shield_wrapper=shield_wrapper,
                     # CARS: Ablation control
                     enable_k_conf=enable_k_conf,
                     enable_k_risk=enable_k_risk,
-                    # SHIELDING COMMENTED OUT
-                    # enable_k_shield=enable_k_shield,
                 )
                 if adaptive_k:
-                    # SHIELDING COMMENTED OUT - removed shield from log
                     print(f"[Evaluation] CARS enabled")
                 print(f"[Evaluation] Environment wrapped with ResidualActionWrapper")
             
@@ -657,8 +602,6 @@ class EvaluationMixin:
             episode_costs = []
             episode_near_misses = []
             episode_danger_time = []
-            # SHIELDING COMMENTED OUT
-            # episode_shield_intervention_counts = []  # Track shield interventions per episode
             residual_magnitudes = []
             base_magnitudes = []
             
@@ -670,8 +613,6 @@ class EvaluationMixin:
             # CARS K components for charting
             all_k_conf = []
             all_k_risk = []
-            # SHIELDING COMMENTED OUT
-            # all_k_shield = []
             
             # Trajectory storage for replay
             trajectory = []
@@ -694,8 +635,6 @@ class EvaluationMixin:
                 episode_near_miss_count = 0
                 episode_danger_count = 0
                 episode_frames = []
-                # SHIELDING COMMENTED OUT
-                # episode_shield_interventions = 0  # Track shield interventions per episode
                 
                 print(f"[Evaluation] Episode {episode + 1}/{total_episodes}")
                 
@@ -717,9 +656,6 @@ class EvaluationMixin:
                     if 'cost' in info:
                         episode_cost += info['cost']
                     
-                    # SHIELDING COMMENTED OUT - Track shield interventions if available
-                    # if info.get('shield_intervention', False):
-                    #     episode_shield_interventions += 1
                     if 'near_miss' in info and info['near_miss']:
                         episode_near_miss_count += 1
                     if 'in_danger_zone' in info and info['in_danger_zone']:
@@ -763,9 +699,6 @@ class EvaluationMixin:
                             all_k_conf.append(res_info['K_conf'])
                         if 'K_risk' in res_info:
                             all_k_risk.append(res_info['K_risk'])
-                        # SHIELDING COMMENTED OUT
-                        # if 'K_shield' in res_info:
-                        #     all_k_shield.append(res_info['K_shield'])
                     
                     # Get agent position and velocity from base environment (same method as training callback)
                     agent_pos = [0, 0, 0]
@@ -888,11 +821,10 @@ class EvaluationMixin:
                                 base_magnitudes if base_magnitudes else None,
                                 all_cosine_sims if all_cosine_sims else None,
                                 all_intervention_flags if all_intervention_flags else None,
-                                None,  # SHIELDING COMMENTED OUT - episode_shield_intervention_counts
+                                None,  # episode_shield_intervention_counts not used
                                 effective_k_values=all_effective_k if all_effective_k else None,
                                 k_conf_values=all_k_conf if all_k_conf else None,
                                 k_risk_values=all_k_risk if all_k_risk else None,
-                                # SHIELDING COMMENTED OUT - k_shield_values=all_k_shield if all_k_shield else None,
                                 window_size=50  # Use recent 50 episodes for rolling metrics
                             )
                         except Exception as e:
@@ -942,12 +874,9 @@ class EvaluationMixin:
                 episode_crashes.append(crash)
                 episode_timeouts.append(timeout)
                 episode_costs.append(episode_cost)
-                # SHIELDING COMMENTED OUT - Track shield interventions per episode
-                # episode_shield_intervention_counts.append(episode_shield_interventions)
                 episode_near_misses.append(episode_near_miss_count)
                 episode_danger_time.append(episode_danger_count)
                 
-                # SHIELDING COMMENTED OUT - removed shield_interventions from log
                 print(f"[Evaluation] Episode {episode + 1} complete: reward={episode_reward:.2f}, steps={step}, success={success}, crash={crash}, timeout={timeout}")
                 
                 # Update Lagrangian multiplier if safety constraint is enabled
@@ -971,11 +900,10 @@ class EvaluationMixin:
                         base_magnitudes if base_magnitudes else None,
                         all_cosine_sims if all_cosine_sims else None,
                         all_intervention_flags if all_intervention_flags else None,
-                        None,  # SHIELDING COMMENTED OUT - episode_shield_intervention_counts
+                        None,  # episode_shield_intervention_counts not used
                         effective_k_values=all_effective_k if all_effective_k else None,
                         k_conf_values=all_k_conf if all_k_conf else None,
                         k_risk_values=all_k_risk if all_k_risk else None,
-                        # SHIELDING COMMENTED OUT - k_shield_values=all_k_shield if all_k_shield else None,
                         window_size=None  # Use all episodes for cumulative metrics
                     )
                 except Exception as e:
@@ -1052,11 +980,10 @@ class EvaluationMixin:
                     base_magnitudes if base_magnitudes else None,
                     all_cosine_sims if all_cosine_sims else None,
                     all_intervention_flags if all_intervention_flags else None,
-                    None,  # SHIELDING COMMENTED OUT - episode_shield_intervention_counts
+                    None,  # episode_shield_intervention_counts not used
                     effective_k_values=all_effective_k if all_effective_k else None,
                     k_conf_values=all_k_conf if all_k_conf else None,
                     k_risk_values=all_k_risk if all_k_risk else None,
-                    # SHIELDING COMMENTED OUT - k_shield_values=all_k_shield if all_k_shield else None,
                     window_size=None  # Use all episodes for final metrics
                 )
                 

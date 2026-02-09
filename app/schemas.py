@@ -105,8 +105,6 @@ class ResidualConnectorBase(BaseModel):
     adaptive_k: bool = Field(False, description="Enable adaptive K-factor that reduces K when residual opposes base action")
     enable_k_conf: bool = Field(True, description="Enable conflict-aware scaling component (K_conf)")
     enable_k_risk: bool = Field(True, description="Enable risk-aware scaling component (K_risk)")
-    # SHIELDING COMMENTED OUT
-    # enable_k_shield: bool = Field(True, description="Enable shield-aware scaling component (K_shield)")
 
 
 class ResidualConnectorCreate(ResidualConnectorBase):
@@ -122,8 +120,6 @@ class ResidualConnectorUpdate(BaseModel):
     adaptive_k: Optional[bool] = Field(None, description="Enable adaptive K-factor")
     enable_k_conf: Optional[bool] = Field(None, description="Enable conflict-aware scaling component (K_conf)")
     enable_k_risk: Optional[bool] = Field(None, description="Enable risk-aware scaling component (K_risk)")
-    # SHIELDING COMMENTED OUT
-    # enable_k_shield: Optional[bool] = Field(None, description="Enable shield-aware scaling component (K_shield)")
 
 
 class ResidualConnector(ResidualConnectorBase):
@@ -202,14 +198,6 @@ class SafetyConstraintConfig(BaseModel):
     wall_near_miss_weight: float = Field(0.005, ge=0, description="Weight for wall near-miss cost (per-step, active only when ignore_walls=False)")
     wall_danger_zone_weight: float = Field(0.01, ge=0, description="Weight for wall danger zone cost (per-step, additive, active only when ignore_walls=False)")
     wall_near_miss_threshold: float = Field(1.0, gt=0, description="Distance threshold for wall near-miss in meters")
-    
-
-    # SHIELDING COMMENTED OUT - Safety Shield (runtime action filtering)
-    # shield_enabled: bool = Field(False, description="Enable runtime Safety Shield that blocks dangerous actions")
-    # shield_threshold: float = Field(0.3, gt=0, le=1.0, description="Min LIDAR distance (normalized 0-1) to trigger shield for DRONES. Lower = more aggressive")
-    # shield_wall_threshold: float = Field(0.1, gt=0, le=1.0, description="Min LIDAR distance (normalized 0-1) to trigger shield for WALLS. Lower = more aggressive")
-    # shield_fallback_strength: float = Field(0.8, gt=0, le=1.0, description="Strength of retreat action when shield activates (0-1)")
-
 
 
 class ExperimentBase(BaseModel):
@@ -359,67 +347,6 @@ class SimulationFrame(BaseModel):
     done: bool = False
     success: bool = False
     crashed: bool = False
-
-
-# # ==================== Curriculum Learning ====================
-# class CurriculumStepConfigBase(BaseModel):
-#     """Configuration for a single curriculum step."""
-#     env_id: int
-#     agent_id: Optional[int] = None
-#     residual_connector_id: Optional[int] = None
-#     reward_id: int
-#     total_steps: int = Field(100000, gt=0)
-#     snapshot_freq: int = Field(10000, gt=0)
-#     max_ep_length: int = Field(2000, gt=0)
-
-
-# class CurriculumStepBase(BaseModel):
-#     """Base schema for curriculum step."""
-#     order: int = Field(..., ge=1, description="Step order in pipeline (1-indexed)")
-#     step_type: str = Field(..., description="Step type: training, fine_tuning, or residual")
-#     config: CurriculumStepConfigBase
-#     safety_config: Optional[SafetyConstraintConfig] = None
-#     target_success_rate: float = Field(0.95, ge=0, le=1, description="Success rate threshold to advance (0-1)")
-#     min_episodes: int = Field(50, gt=0, description="Minimum episodes before checking transition")
-
-
-# class CurriculumStepCreate(CurriculumStepBase):
-#     """Schema for creating a curriculum step."""
-#     pass
-
-
-# class CurriculumStepRead(CurriculumStepBase):
-#     """Schema for reading a curriculum step."""
-#     id: int
-#     curriculum_id: int
-#     is_completed: bool
-
-#     class Config:
-#         from_attributes = True
-
-
-# class CurriculumBase(BaseModel):
-#     """Base schema for curriculum."""
-#     name: str = Field(..., min_length=1, max_length=100)
-#     description: Optional[str] = None
-
-
-# class CurriculumCreate(CurriculumBase):
-#     """Schema for creating a curriculum."""
-#     steps: List[CurriculumStepCreate] = Field(..., min_items=1, description="List of sequential training steps")
-
-
-# class CurriculumRead(CurriculumBase):
-#     """Schema for reading a curriculum."""
-#     id: int
-#     status: str
-#     current_step_order: int
-#     created_at: dt.datetime
-#     updated_at: Optional[dt.datetime] = None
-#     steps: List[CurriculumStepRead] = []
-
-#     class Config:
-#         from_attributes = True
 
 
 # Resolve forward references for nested models

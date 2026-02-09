@@ -6,7 +6,6 @@ import ResidualConnectors from './pages/ResidualConnectors';
 import RewardFunctions from './pages/RewardFunctions';
 import Models from './pages/Models';
 import Experiments from './pages/Experiments';
-// import Curriculum from './pages/Curriculum';
 import Layout from './components/layout/Layout';
 import { DataCacheProvider } from './context/DataCacheContext';
 
@@ -23,7 +22,6 @@ function App() {
           <Route path="/reward-functions" element={<RewardFunctions />} />
           <Route path="/models" element={<Models />} />
           <Route path="/experiments" element={<Experiments />} />
-          {/* <Route path="/curriculum" element={<Curriculum />} /> */}
         </Routes>
       </Layout>
     </DataCacheProvider>

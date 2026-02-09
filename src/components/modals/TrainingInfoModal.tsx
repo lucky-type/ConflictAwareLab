@@ -498,25 +498,12 @@ export default function TrainingInfoModal({
                       );
                     })()}
 
-                    {/* NEW: Comprehensive Metrics Charts */}
+                    {/* Comprehensive Metrics Charts */}
                     {progressHistory.length > 0 && (() => {
-                      // SHIELDING COMMENTED OUT
-                      // const hasShieldData = progressHistory.some(p =>
-                      //   (p.metrics.shield_intervention_rate ?? 0) > 0 ||
-                      //   (p.metrics.cost_mean ?? 0) > 0 ||
-                      //   (p.metrics.violation_rate ?? 0) > 0
-                      // );
-
-                      const safetyEnabled =
-                        experiment?.safety_constraint?.enabled ||
-                        // experiment?.safety_constraint?.shield_enabled ||
-                        // hasShieldData ||
-                        false;
+                      const safetyEnabled = experiment?.safety_constraint?.enabled || false;
 
                       console.log('[TrainingInfoModal] Safety Debug:', {
                         safetyConstraintEnabled: experiment?.safety_constraint?.enabled,
-                        // shieldEnabled: experiment?.safety_constraint?.shield_enabled,
-                        // hasShieldData,
                         progressHistoryLength: progressHistory.length,
                         latestMetrics: progressHistory[progressHistory.length - 1]?.metrics,
                         safetyEnabled
