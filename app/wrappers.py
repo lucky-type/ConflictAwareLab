@@ -17,12 +17,11 @@ class ResidualActionWrapper(gym.Wrapper):
     Final action = clip(base_action + K * residual_action, -1, 1)
     
     CARS computes K as a product of modular components:
-        K = clip(K_base × K_conf × K_risk × K_shield × K_progress, K_min, K_max)
+        K = clip(K_base × K_conf × K_risk × K_progress, K_min, K_max)
     
     Each component is optional - if not available, defaults to 1.0:
         - K_conf: Conflict-aware scaling based on cosine similarity
         - K_risk: Risk-aware scaling based on Lagrange λ
-        - K_shield: Safety-aware scaling based on Shield intervention rate
         - K_progress: Progress-aware boost when base policy is stuck (placeholder)
     """
     
@@ -107,7 +106,6 @@ class ResidualActionWrapper(gym.Wrapper):
         self._last_cos_sim = 0.0
         self._last_K_conf = 1.0
         self._last_K_risk = 1.0
-        self._last_K_shield = 1.0
         self._last_K_progress = 1.0
         
         print(f"[ResidualWrapper] === CARS Configuration ===")
@@ -212,7 +210,7 @@ class ResidualActionWrapper(gym.Wrapper):
         
         # =============================================
         # CARS: Conflict-Aware Residual Scaling
-        # K = clip(K_base × K_conf × K_risk × K_shield × K_progress, K_min, K_max)
+        # K = clip(K_base × K_conf × K_risk × K_progress, K_min, K_max)
         # =============================================
         
         if self.adaptive_k:
@@ -254,8 +252,6 @@ class ResidualActionWrapper(gym.Wrapper):
                     boost = self.risk_boost_max * np.tanh(self.risk_alpha * current_lambda)
                     K_risk = 1.0 + boost
 
-            K_shield = 1.0
-            
             # --- K_progress: Progress-aware boost (currently fixed at 1.0) ---
             K_progress = 1.0
             
@@ -266,13 +262,12 @@ class ResidualActionWrapper(gym.Wrapper):
             K_conf = self._ema_k_conf
             
             # --- Final K computation ---
-            effective_k = self.k_factor * K_conf * K_risk * K_shield * K_progress
+            effective_k = self.k_factor * K_conf * K_risk * K_progress
             effective_k = np.clip(effective_k, self.k_min, self.k_max)
         else:
             # CARS disabled: use static k_factor
             K_conf = 1.0
             K_risk = 1.0
-            K_shield = 1.0
             K_progress = 1.0
             effective_k = self.k_factor
             # Reset EMA state when disabled
@@ -281,7 +276,6 @@ class ResidualActionWrapper(gym.Wrapper):
         # Store CARS component values for logging
         self._last_K_conf = K_conf
         self._last_K_risk = K_risk
-        self._last_K_shield = K_shield
         self._last_K_progress = K_progress
         self._last_effective_k = effective_k
         self._effective_k_sum += effective_k
@@ -349,6 +343,9 @@ class ResidualActionWrapper(gym.Wrapper):
         
         # Add residual-specific info for analysis (extended with CARS components)
         avg_effective_k = self._effective_k_sum / max(1, self._effective_k_count)
+        # Detect action clipping (any dimension saturated at bounds)
+        action_clipped = bool(np.any(np.abs(final_action) >= 0.999))
+
         info['residual_info'] = {
             'base_action': base_action.tolist(),
             'residual_action': residual_action.tolist(),
@@ -359,6 +356,7 @@ class ResidualActionWrapper(gym.Wrapper):
             'effective_k': effective_k,
             'avg_effective_k': avg_effective_k,
             'adaptive_k_enabled': self.adaptive_k,
+            'action_clipped': action_clipped,
             # CARS components
             'K_conf': K_conf,
             'K_risk': K_risk,
@@ -372,12 +370,15 @@ class ResidualActionWrapper(gym.Wrapper):
         """Reset the environment and store initial observation."""
         obs, info = self.env.reset(**kwargs)
         self._last_obs = obs
-        
+
         # Reset action tracking
         self.last_base_action = None
         self.last_residual_action = None
         self.last_final_action = None
-        
+
+        # Reset CARS EMA state between episodes to prevent inter-episode contamination
+        self._ema_k_conf = 1.0
+
         return obs, info
 
 

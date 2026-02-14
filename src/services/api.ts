@@ -157,6 +157,9 @@ export interface Experiment {
   trajectory_data?: Array<Record<string, any>>;
   evaluation_episodes?: number;
   fps_delay?: number;
+  run_without_simulation?: boolean;
+  evaluation_policy_mode?: 'model' | 'heuristic';
+  heuristic_algorithm?: 'potential_field' | 'vfh_lite' | null;
   seed?: number | null;  // Random seed for reproducibility
   created_at: string;
   environment?: Environment;
@@ -182,6 +185,9 @@ export interface ExperimentCreate {
   safety_constraint?: SafetyConstraintConfig;
   evaluation_episodes?: number;
   fps_delay?: number;
+  run_without_simulation?: boolean;
+  evaluation_policy_mode?: 'model' | 'heuristic';
+  heuristic_algorithm?: 'potential_field' | 'vfh_lite' | null;
   seed?: number | null;  // Random seed for reproducibility
 }
 
@@ -212,10 +218,15 @@ export interface TrainingMetrics {
   reward_raw_mean: number;
   reward_raw_std: number;
   reward_shaped_mean: number;
-  success_rate: number;  // Percentage
-  crash_rate: number;  // Percentage
+  success_rate: number;  // Percentage (rounded to 0.5% for UI)
+  crash_rate: number;  // Percentage (rounded to 0.5% for UI)
   mean_ep_length: number;
   ep_length_std: number;
+
+  // A2) Raw (unrounded) metrics for statistical analysis
+  success_rate_raw?: number;  // Exact percentage (no rounding)
+  crash_rate_raw?: number;    // Exact percentage (no rounding)
+  timeout_rate_raw?: number;  // Exact percentage (no rounding)
 
   // B) Safety/Risk Metrics
   cost_mean: number;
@@ -265,6 +276,11 @@ export interface TrainingMetrics {
   // J) CARS K Components
   k_conf_mean?: number;   // Conflict-aware K component
   k_risk_mean?: number;   // Risk (\u03bb-based) K component
+
+  // K) CARS Mechanistic Metrics
+  conflict_negative_rate?: number;   // % steps where cos_sim < 0
+  risk_activation_rate?: number;     // % steps where K_risk > 1.0
+  action_clipping_rate?: number;     // % steps where action clipped to ±1
 
 }
 

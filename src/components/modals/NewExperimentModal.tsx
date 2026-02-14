@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 import type { Agent, RewardFunction, Environment, ModelSnapshot, Experiment, ResidualConnector } from '../../services/api';
 import { useDataCache } from '../../context/DataCacheContext';
 
+type HeuristicAlgorithmOption = 'potential_field' | 'vfh_lite';
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -42,6 +44,9 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
   const [evaluationResidualMode, setEvaluationResidualMode] = useState(false);
   const [evaluationBaseModelId, setEvaluationBaseModelId] = useState<number | null>(null);
   const [evaluationResidualModelId, setEvaluationResidualModelId] = useState<number | null>(null);
+  const [useHeuristicBaseline, setUseHeuristicBaseline] = useState(false);
+  const [heuristicAlgorithm, setHeuristicAlgorithm] = useState<HeuristicAlgorithmOption | null>(null);
+  const [runWithoutSimulation, setRunWithoutSimulation] = useState(false);
 
   // Reproducibility
   const [seed, setSeed] = useState<number | null>(null);
@@ -263,6 +268,7 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           snapshot_freq: typeof snapshotInterval === 'number' ? snapshotInterval : parseInt(String(snapshotInterval)) || 50000,
           max_ep_length: typeof maxEpLength === 'number' ? maxEpLength : parseInt(String(maxEpLength)) || 2000,
           training_mode: 'standard',
+          run_without_simulation: runWithoutSimulation,
           seed: seed,
         };
 
@@ -316,6 +322,7 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           training_mode: 'residual',
           residual_base_model_id: residualBaseModelId,
           residual_connector_id: residualConnectorId,
+          run_without_simulation: runWithoutSimulation,
           seed: seed,
         };
 
@@ -362,6 +369,7 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           max_ep_length: typeof maxEpLength === 'number' ? maxEpLength : parseInt(String(maxEpLength)) || 2000,
           base_model_snapshot_id: modelSnapshotId,
           fine_tuning_strategy: 'full_finetune',
+          run_without_simulation: runWithoutSimulation,
           seed: seed,
         };
 
@@ -390,14 +398,21 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
 
         createdExperiment = await api.createExperiment(fineTuningConfig);
       } else if (tab === 'Evaluation') {
-        if (!evaluationBaseModelId) {
-          alert('Please select a base model');
-          return;
-        }
+        if (useHeuristicBaseline) {
+          if (!heuristicAlgorithm) {
+            alert('Please select one heuristic algorithm');
+            return;
+          }
+        } else {
+          if (!evaluationBaseModelId) {
+            alert('Please select a base model');
+            return;
+          }
 
-        if (evaluationResidualMode && !evaluationResidualModelId) {
-          alert('Please select a residual model when residual mode is enabled');
-          return;
+          if (evaluationResidualMode && !evaluationResidualModelId) {
+            alert('Please select a residual model when residual mode is enabled');
+            return;
+          }
         }
 
         const evaluationConfig: any = {
@@ -411,18 +426,28 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
           max_ep_length: typeof maxEpLength === 'number' ? maxEpLength : parseInt(String(maxEpLength)) || 2000,
           evaluation_episodes: typeof evaluationEpisodes === 'number' ? evaluationEpisodes : parseInt(String(evaluationEpisodes)) || 100,
           fps_delay: typeof fpsDelay === 'number' ? fpsDelay : parseInt(String(fpsDelay)) || 0,
+          run_without_simulation: runWithoutSimulation,
           seed: seed,
         };
 
-        // Set model configuration based on residual mode
-        if (evaluationResidualMode) {
-          evaluationConfig.training_mode = 'residual';
-          evaluationConfig.residual_base_model_id = evaluationBaseModelId;
-          evaluationConfig.model_snapshot_id = evaluationResidualModelId;
-          evaluationConfig.residual_connector_id = residualConnectorId; // May need to add selector for this
-        } else {
+        // Set policy configuration for evaluation mode
+        if (useHeuristicBaseline) {
           evaluationConfig.training_mode = 'standard';
-          evaluationConfig.model_snapshot_id = evaluationBaseModelId;
+          evaluationConfig.evaluation_policy_mode = 'heuristic';
+          evaluationConfig.heuristic_algorithm = heuristicAlgorithm;
+        } else {
+          evaluationConfig.evaluation_policy_mode = 'model';
+          evaluationConfig.heuristic_algorithm = null;
+
+          if (evaluationResidualMode) {
+            evaluationConfig.training_mode = 'residual';
+            evaluationConfig.residual_base_model_id = evaluationBaseModelId;
+            evaluationConfig.model_snapshot_id = evaluationResidualModelId;
+            evaluationConfig.residual_connector_id = residualConnectorId; // May need to add selector for this
+          } else {
+            evaluationConfig.training_mode = 'standard';
+            evaluationConfig.model_snapshot_id = evaluationBaseModelId;
+          }
         }
 
         createdExperiment = await api.createExperiment(evaluationConfig);
@@ -852,128 +877,176 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
                 </>
               ) : tab === 'Evaluation' ? (
                 <>
-                  <label className="block space-y-2 text-sm">
-                    <span className="text-notion-text">Base Model</span>
-                    <select
-                      value={evaluationBaseModelId ?? ''}
-                      onChange={(e) => setEvaluationBaseModelId(parseInt(e.target.value))}
-                      className="w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-notion-text focus:border-notion-blue focus:ring-1 focus:ring-notion-blue focus:outline-none"
-                      required
-                    >
-                      <option value="">Select base model...</option>
-                      {snapshots.length === 0 ? (
-                        <option value="" disabled>No snapshots available</option>
-                      ) : (
-                        snapshots.map((snapshot) => {
-                          const experiment = experiments.find(e => e.id === snapshot.experiment_id);
-                          return (
-                            <option key={snapshot.id} value={snapshot.id}>
-                              {experiment?.name || `Exp ${snapshot.experiment_id}`} - Iteration {snapshot.iteration}
-                            </option>
-                          );
-                        })
-                      )}
-                    </select>
-                  </label>
-
-                  <div className="rounded-lg bg-notion-hover border border-notion-border px-3 py-2 mb-4">
-                    <p className="text-xs text-green-400 font-medium mb-1">
-                      📊 Evaluation Mode
-                    </p>
-                    <p className="text-xs text-notion-text leading-relaxed">
-                      Run deterministic evaluation for a fixed number of episodes. Records trajectory for replay and shows all metrics like training mode.
-                    </p>
-                  </div>
-
                   <div className="space-y-4">
+                    <div className="rounded-lg bg-notion-hover border border-notion-border px-3 py-2 mb-4">
+                      <p className="text-xs text-green-400 font-medium mb-1">
+                        📊 Evaluation Mode
+                      </p>
+                      <p className="text-xs text-notion-text leading-relaxed">
+                        Run deterministic evaluation for a fixed number of episodes. Records trajectory for replay and shows all metrics like training mode.
+                      </p>
+                    </div>
+
                     <label className="flex items-center space-x-2">
                       <input
                         type="checkbox"
-                        checked={evaluationResidualMode}
-                        onChange={(e) => setEvaluationResidualMode(e.target.checked)}
+                        checked={useHeuristicBaseline}
+                        onChange={(e) => {
+                          const enabled = e.target.checked;
+                          setUseHeuristicBaseline(enabled);
+                          if (enabled) {
+                            setEvaluationResidualMode(false);
+                            setEvaluationResidualModelId(null);
+                          }
+                        }}
                         className="rounded border-slate-600 bg-slate-900/80 text-notion-blue focus:ring-cyan-400"
                       />
-                      <span className="text-notion-text text-sm">Use Residual Policy</span>
+                      <span className="text-notion-text text-sm">Use Heuristic Baseline</span>
                     </label>
 
-                    {evaluationResidualMode && (
+                    {useHeuristicBaseline ? (
+                      <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3">
+                        <p className="text-xs font-medium text-emerald-700">
+                          Heuristic mode runs observation-only baseline controllers without model snapshots.
+                        </p>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={heuristicAlgorithm === 'potential_field'}
+                            onChange={(e) => setHeuristicAlgorithm(e.target.checked ? 'potential_field' : null)}
+                            className="rounded border-slate-600 bg-slate-900/80 text-notion-blue focus:ring-cyan-400"
+                          />
+                          <span className="text-notion-text text-sm">Potential Field</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={heuristicAlgorithm === 'vfh_lite'}
+                            onChange={(e) => setHeuristicAlgorithm(e.target.checked ? 'vfh_lite' : null)}
+                            className="rounded border-slate-600 bg-slate-900/80 text-notion-blue focus:ring-cyan-400"
+                          />
+                          <span className="text-notion-text text-sm">VFH-Lite</span>
+                        </label>
+                        <p className="text-xs text-notion-text-tertiary">
+                          Select exactly one heuristic algorithm.
+                        </p>
+                      </div>
+                    ) : (
                       <>
                         <label className="block space-y-2 text-sm">
-                          <span className="text-notion-text">Residual Model</span>
+                          <span className="text-notion-text">Base Model</span>
                           <select
-                            value={evaluationResidualModelId ?? ''}
-                            onChange={(e) => setEvaluationResidualModelId(parseInt(e.target.value))}
+                            value={evaluationBaseModelId ?? ''}
+                            onChange={(e) => setEvaluationBaseModelId(parseInt(e.target.value))}
                             className="w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-notion-text focus:border-notion-blue focus:ring-1 focus:ring-notion-blue focus:outline-none"
-                            required={evaluationResidualMode}
+                            required
                           >
-                            <option value="">Select residual model...</option>
+                            <option value="">Select base model...</option>
                             {snapshots.length === 0 ? (
                               <option value="" disabled>No snapshots available</option>
                             ) : (
-                              snapshots
-                                .filter(s => s.metrics_at_save?.training_mode === 'residual')
-                                .map((snapshot) => {
-                                  const experiment = experiments.find(e => e.id === snapshot.experiment_id);
-                                  return (
-                                    <option key={snapshot.id} value={snapshot.id}>
-                                      {experiment?.name || `Exp ${snapshot.experiment_id}`} - Iteration {snapshot.iteration} [Residual]
-                                    </option>
-                                  );
-                                })
+                              snapshots.map((snapshot) => {
+                                const experiment = experiments.find(e => e.id === snapshot.experiment_id);
+                                return (
+                                  <option key={snapshot.id} value={snapshot.id}>
+                                    {experiment?.name || `Exp ${snapshot.experiment_id}`} - Iteration {snapshot.iteration}
+                                  </option>
+                                );
+                              })
                             )}
                           </select>
-                          <p className="text-xs text-notion-text-tertiary">
-                            Select the trained residual policy snapshot.
-                          </p>
-                          {evaluationResidualModelId && (() => {
-                            const snap = snapshots.find(s => s.id === evaluationResidualModelId);
-                            if (snap?.metrics_at_save?.residual_connector_id) {
-                              const connector = residualConnectors.find(c => c.id === snap.metrics_at_save.residual_connector_id);
-                              return (
-                                <div className="text-xs text-notion-text-tertiary bg-notion-hover rounded px-2 py-1 mt-1">
-                                  Training used: {connector?.name || `Connector #${snap.metrics_at_save.residual_connector_id}`}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
                         </label>
 
-                        <label className="block space-y-2 text-sm">
-                          <span className="text-notion-text">Residual Connector</span>
-                          <select
-                            value={residualConnectorId ?? ''}
-                            onChange={(e) => setResidualConnectorId(parseInt(e.target.value))}
-                            className="w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-notion-text focus:border-notion-blue focus:ring-1 focus:ring-notion-blue focus:outline-none"
-                            required={evaluationResidualMode}
-                          >
-                            <option value="">Select residual connector...</option>
-                            {residualConnectors.length === 0 ? (
-                              <option value="" disabled>No residual connectors available</option>
-                            ) : (
-                              residualConnectors.map((connector) => (
-                                <option key={connector.id} value={connector.id}>
-                                  {connector.name} ({connector.algorithm})
-                                </option>
-                              ))
-                            )}
-                          </select>
-                          <p className="text-xs text-notion-text-tertiary">
-                            Auto-selected from residual model snapshot. Can be changed if needed.
-                          </p>
-                          {evaluationResidualModelId && residualConnectorId && (() => {
-                            const snap = snapshots.find(s => s.id === evaluationResidualModelId);
-                            const trainingConnectorId = snap?.metrics_at_save?.residual_connector_id;
-                            if (trainingConnectorId && trainingConnectorId !== residualConnectorId) {
-                              return (
-                                <div className="text-xs text-amber-400 bg-amber-950/20 border border-amber-500/30 rounded px-2 py-1 mt-1">
-                                  Warning: Selected connector differs from training. Results may not match expected behavior.
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={evaluationResidualMode}
+                            onChange={(e) => setEvaluationResidualMode(e.target.checked)}
+                            className="rounded border-slate-600 bg-slate-900/80 text-notion-blue focus:ring-cyan-400"
+                          />
+                          <span className="text-notion-text text-sm">Use Residual Policy</span>
                         </label>
+
+                        {evaluationResidualMode && (
+                          <>
+                            <label className="block space-y-2 text-sm">
+                              <span className="text-notion-text">Residual Model</span>
+                              <select
+                                value={evaluationResidualModelId ?? ''}
+                                onChange={(e) => setEvaluationResidualModelId(parseInt(e.target.value))}
+                                className="w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-notion-text focus:border-notion-blue focus:ring-1 focus:ring-notion-blue focus:outline-none"
+                                required={evaluationResidualMode}
+                              >
+                                <option value="">Select residual model...</option>
+                                {snapshots.length === 0 ? (
+                                  <option value="" disabled>No snapshots available</option>
+                                ) : (
+                                  snapshots
+                                    .filter(s => s.metrics_at_save?.training_mode === 'residual')
+                                    .map((snapshot) => {
+                                      const experiment = experiments.find(e => e.id === snapshot.experiment_id);
+                                      return (
+                                        <option key={snapshot.id} value={snapshot.id}>
+                                          {experiment?.name || `Exp ${snapshot.experiment_id}`} - Iteration {snapshot.iteration} [Residual]
+                                        </option>
+                                      );
+                                    })
+                                )}
+                              </select>
+                              <p className="text-xs text-notion-text-tertiary">
+                                Select the trained residual policy snapshot.
+                              </p>
+                              {evaluationResidualModelId && (() => {
+                                const snap = snapshots.find(s => s.id === evaluationResidualModelId);
+                                if (snap?.metrics_at_save?.residual_connector_id) {
+                                  const connector = residualConnectors.find(c => c.id === snap.metrics_at_save.residual_connector_id);
+                                  return (
+                                    <div className="text-xs text-notion-text-tertiary bg-notion-hover rounded px-2 py-1 mt-1">
+                                      Training used: {connector?.name || `Connector #${snap.metrics_at_save.residual_connector_id}`}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </label>
+
+                            <label className="block space-y-2 text-sm">
+                              <span className="text-notion-text">Residual Connector</span>
+                              <select
+                                value={residualConnectorId ?? ''}
+                                onChange={(e) => setResidualConnectorId(parseInt(e.target.value))}
+                                className="w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-notion-text focus:border-notion-blue focus:ring-1 focus:ring-notion-blue focus:outline-none"
+                                required={evaluationResidualMode}
+                              >
+                                <option value="">Select residual connector...</option>
+                                {residualConnectors.length === 0 ? (
+                                  <option value="" disabled>No residual connectors available</option>
+                                ) : (
+                                  residualConnectors.map((connector) => (
+                                    <option key={connector.id} value={connector.id}>
+                                      {connector.name} ({connector.algorithm})
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                              <p className="text-xs text-notion-text-tertiary">
+                                Auto-selected from residual model snapshot. Can be changed if needed.
+                              </p>
+                              {evaluationResidualModelId && residualConnectorId && (() => {
+                                const snap = snapshots.find(s => s.id === evaluationResidualModelId);
+                                const trainingConnectorId = snap?.metrics_at_save?.residual_connector_id;
+                                if (trainingConnectorId && trainingConnectorId !== residualConnectorId) {
+                                  return (
+                                    <div className="text-xs text-amber-400 bg-amber-950/20 border border-amber-500/30 rounded px-2 py-1 mt-1">
+                                      Warning: Selected connector differs from training. Results may not match expected behavior.
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </label>
+                          </>
+                        )}
                       </>
                     )}
                   </div>
@@ -1077,6 +1150,26 @@ export default function NewExperimentModal({ open, onClose, onSave }: Props) {
                   Set a fixed seed to reproduce exact training results. Leave empty for random initialization.
                 </p>
               </label>
+
+              {tab !== 'Simulation' && (
+                <label className="block space-y-2">
+                  <span className="text-notion-text">Performance Mode</span>
+                  <div className="flex items-start gap-3 rounded-xl border border-notion-border bg-notion-light-gray px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={runWithoutSimulation}
+                      onChange={(e) => setRunWithoutSimulation(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-600 bg-slate-900/80 text-notion-blue focus:ring-cyan-400"
+                    />
+                    <div>
+                      <p className="text-sm text-notion-text">Run without simulation (faster, no replay)</p>
+                      <p className="text-xs text-notion-text-tertiary">
+                        Skips simulation frame streaming and trajectory recording for maximum speed.
+                      </p>
+                    </div>
+                  </div>
+                </label>
+              )}
 
               {tab !== 'Simulation' && tab !== 'Evaluation' && (
                 <div className={`rounded-xl border border-notion-border bg-slate-50 p-4 transition-all ${(tab === 'Residual' || (tab === 'Fine-Tuning' && safetyConstraintEnabled)) ? 'ring-1 ring-orange-500/50 bg-orange-50' : ''

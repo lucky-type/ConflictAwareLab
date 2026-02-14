@@ -149,21 +149,13 @@ export default function MetricsCharts({ progressHistory, safetyEnabled, useEpiso
   );
 
   // Check if any safety data exists
-  const hasShieldData = chartData.some(d =>
+  const hasSafetyData = chartData.some(d =>
     d.cost_mean > 0 ||
     d.violation_rate > 0
   );
 
-  // Show safety section if explicitly enabled OR if shield/safety data exists
-  const shouldShowSafety = safetyEnabled || hasShieldData;
-
-  console.log('[MetricsCharts] Safety Debug:', {
-    safetyEnabled,
-    hasShieldData,
-    shouldShowSafety,
-    latestShieldRate: chartData.length > 0 ? chartData[chartData.length - 1].shield_intervention_rate : 0,
-    latestShieldPerEp: chartData.length > 0 ? chartData[chartData.length - 1].shield_interventions_per_episode : 0,
-  });
+  // Show safety section if explicitly enabled OR if safety data exists
+  const shouldShowSafety = safetyEnabled || hasSafetyData;
 
   if (progressHistory.length === 0) {
     return (

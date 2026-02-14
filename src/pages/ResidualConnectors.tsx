@@ -219,7 +219,7 @@ export default function ResidualConnectors() {
                     {/* {(connector as any).adaptive_k && (
                       <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
                         <div className="w-2 h-2 rounded-full bg-notion-blue animate-pulse"></div>
-                        <p className="text-xs text-notion-blue">CARS enabled - K smoothly scales based on conflict, risk (λ), and shield interventions</p>
+                        <p className="text-xs text-notion-blue">CARS enabled - K smoothly scales based on conflict and risk (λ)</p>
                       </div>
                     )} */}
                   </div>

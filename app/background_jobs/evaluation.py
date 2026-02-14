@@ -29,11 +29,11 @@ class EvaluationMixin:
         base_magnitudes=None,
         cosine_similarities=None,
         intervention_flags=None,
-        episode_shield_interventions=None,
         # CARS K metrics
         effective_k_values=None,
         k_conf_values=None,
         k_risk_values=None,
+        action_clipping_flags=None,
         window_size=None,
     ):
         """Calculate comprehensive metrics matching training callback format."""
@@ -56,7 +56,6 @@ class EvaluationMixin:
             recent_costs = episode_costs[-window_size:]
             recent_near_misses = episode_near_misses[-window_size:]
             recent_danger_time = episode_danger_time[-window_size:]
-            recent_shield_interventions = episode_shield_interventions[-window_size:] if episode_shield_interventions else []
         else:
             recent_rewards = episode_rewards if episode_rewards else []
             recent_lengths = episode_lengths if episode_lengths else []
@@ -66,7 +65,6 @@ class EvaluationMixin:
             recent_costs = episode_costs if episode_costs else []
             recent_near_misses = episode_near_misses if episode_near_misses else []
             recent_danger_time = episode_danger_time if episode_danger_time else []
-            recent_shield_interventions = episode_shield_interventions if episode_shield_interventions else []
         
         # A) Performance Metrics
         if len(recent_rewards) > 0:
@@ -92,10 +90,14 @@ class EvaluationMixin:
                 # No shaping, shaped = raw
                 metrics["reward_shaped_mean"] = metrics["reward_raw_mean"]
             
-            # Round to 0.5% precision (nearest 0.5) like training callback
-            metrics["success_rate"] = round(float(np.mean(recent_successes)) * 100.0 * 2) / 2
-            metrics["crash_rate"] = round(float(np.mean(recent_crashes)) * 100.0 * 2) / 2
-            metrics["timeout_rate"] = round(float(np.mean(recent_timeouts)) * 100.0 * 2) / 2
+            # Raw (unrounded) values for statistical analysis
+            metrics["success_rate_raw"] = float(np.mean(recent_successes)) * 100.0
+            metrics["crash_rate_raw"] = float(np.mean(recent_crashes)) * 100.0
+            metrics["timeout_rate_raw"] = float(np.mean(recent_timeouts)) * 100.0
+            # Rounded to 0.5% precision for UI display
+            metrics["success_rate"] = round(metrics["success_rate_raw"] * 2) / 2
+            metrics["crash_rate"] = round(metrics["crash_rate_raw"] * 2) / 2
+            metrics["timeout_rate"] = round(metrics["timeout_rate_raw"] * 2) / 2
             
             # NEW: Total episode counts for UI display
             # (currentEpisode / successCount (green) / failedCount (red) / timeoutCount (yellow))
@@ -130,20 +132,14 @@ class EvaluationMixin:
             metrics["danger_time_mean"] = float(np.mean(recent_danger_time))
             
             # Calculate violation rate (same logic as training callback)
-            # Violation = (cumulative_cost / episode_length) > epsilon
+            # Violation = cumulative_cost > epsilon (risk budget)
             if safety_config and safety_config.get('enabled', False):
                 epsilon = safety_config.get('risk_budget', 0.3)
                 metrics["epsilon"] = float(epsilon)
-                
-                if len(recent_costs) == len(recent_lengths):
-                    violations = [
-                        (cost / max(1, length)) > epsilon
-                        for cost, length in zip(recent_costs, recent_lengths)
-                    ]
-                    violation_rate_value = float(np.mean(violations)) * 100.0
-                    metrics["violation_rate"] = violation_rate_value
-                else:
-                    metrics["violation_rate"] = 0.0
+
+                violations = [cost > epsilon for cost in recent_costs]
+                violation_rate_value = float(np.mean(violations)) * 100.0
+                metrics["violation_rate"] = violation_rate_value
             else:
                 metrics["epsilon"] = 0.0
                 metrics["violation_rate"] = 0.0
@@ -156,9 +152,6 @@ class EvaluationMixin:
                 "violation_rate": 0.0,
                 "epsilon": safety_config.get('risk_budget', 0.3) if safety_config and safety_config.get('enabled', False) else 0.0,
             })
-        
-        metrics["shield_intervention_rate"] = 0.0
-        metrics["shield_interventions_per_episode"] = 0.0
         
         # D) Lagrangian Dynamics
         if lagrange_state:
@@ -214,25 +207,41 @@ class EvaluationMixin:
             metrics["intervention_rate"] = float(np.mean(intervention_flags)) * 100.0
         else:
             metrics["intervention_rate"] = 0.0
-        
+
+        # Conflict negative rate (% of steps where cos_sim < 0 — policies oppose each other)
+        if cosine_similarities and len(cosine_similarities) > 0:
+            metrics["conflict_negative_rate"] = float(np.mean([cs < 0 for cs in cosine_similarities])) * 100.0
+        else:
+            metrics["conflict_negative_rate"] = 0.0
+
         # G) CARS K Metrics
         if effective_k_values and len(effective_k_values) > 0:
             metrics["effective_k_mean"] = float(np.mean(effective_k_values))
         else:
             metrics["effective_k_mean"] = 0.0
-        
+
         if k_conf_values and len(k_conf_values) > 0:
             metrics["k_conf_mean"] = float(np.mean(k_conf_values))
         else:
             metrics["k_conf_mean"] = 1.0
-        
+
         if k_risk_values and len(k_risk_values) > 0:
             metrics["k_risk_mean"] = float(np.mean(k_risk_values))
         else:
             metrics["k_risk_mean"] = 1.0
-        
-        metrics["k_shield_mean"] = 1.0
-        
+
+        # Risk activation rate (% of steps where K_risk > 1.0 — safety override active)
+        if k_risk_values and len(k_risk_values) > 0:
+            metrics["risk_activation_rate"] = float(np.mean([kr > 1.0 for kr in k_risk_values])) * 100.0
+        else:
+            metrics["risk_activation_rate"] = 0.0
+
+        # Action clipping rate (% of steps where any action dimension saturated at ±1)
+        if action_clipping_flags and len(action_clipping_flags) > 0:
+            metrics["action_clipping_rate"] = float(np.mean(action_clipping_flags)) * 100.0
+        else:
+            metrics["action_clipping_rate"] = 0.0
+
         # F) Algorithm-specific metrics (not available in evaluation, but set for compatibility)
         metrics["policy_loss"] = None
         metrics["value_loss"] = None
@@ -330,6 +339,7 @@ class EvaluationMixin:
         from ..drone_env import DroneSwarmEnv
         from ..lagrangian_safety import LagrangeState, AppendLambdaWrapper
         from ..wrappers import ResidualActionWrapper
+        from ..heuristic_policies import create_heuristic_policy
         import pybullet as p
 
         print(f"\n=== Starting evaluation for experiment {experiment_id} ===")
@@ -350,48 +360,74 @@ class EvaluationMixin:
             agent = crud.get_entity(db, db_models.Agent, experiment.agent_id)
             reward_function = crud.get_entity(db, db_models.RewardFunction, experiment.reward_id)
             
-            # Determine which model to load (base model or residual model)
+            if not environment:
+                raise ValueError(f"Environment {experiment.env_id} not found")
+            if not agent:
+                raise ValueError(f"Agent {experiment.agent_id} not found")
+            if not reward_function:
+                raise ValueError(f"Reward function {experiment.reward_id} not found")
+
+            evaluation_policy_mode = (getattr(experiment, "evaluation_policy_mode", "model") or "model").lower()
+            if evaluation_policy_mode not in {"model", "heuristic"}:
+                print(f"[Evaluation] Unknown evaluation_policy_mode='{evaluation_policy_mode}', falling back to 'model'")
+                evaluation_policy_mode = "model"
+            is_heuristic_mode = evaluation_policy_mode == "heuristic"
+            heuristic_algorithm = getattr(experiment, "heuristic_algorithm", None)
+            if heuristic_algorithm is not None:
+                heuristic_algorithm = heuristic_algorithm.lower()
+                if heuristic_algorithm == "gap_following":
+                    print("[Evaluation] Legacy heuristic 'gap_following' mapped to 'vfh_lite'")
+                    heuristic_algorithm = "vfh_lite"
+
+            # Determine which policy to run in evaluation: model-based or heuristic baseline.
             base_snapshot_id = None
             residual_snapshot_id = None
-            
-            if experiment.training_mode == "residual" and experiment.residual_base_model_id:
-                base_snapshot_id = experiment.residual_base_model_id
-                residual_snapshot_id = experiment.model_snapshot_id
-                print(f"[Evaluation] Residual mode: base={base_snapshot_id}, residual={residual_snapshot_id}")
-            elif experiment.model_snapshot_id:
-                base_snapshot_id = experiment.model_snapshot_id
-                print(f"[Evaluation] Standard mode: model={base_snapshot_id}")
+            base_snapshot = None
+            residual_snapshot = None
+
+            if not is_heuristic_mode:
+                if experiment.training_mode == "residual" and experiment.residual_base_model_id:
+                    base_snapshot_id = experiment.residual_base_model_id
+                    residual_snapshot_id = experiment.model_snapshot_id
+                    if not residual_snapshot_id:
+                        raise ValueError("Residual evaluation requires a residual model snapshot")
+                    print(f"[Evaluation] Policy mode=model, training_mode=residual: base={base_snapshot_id}, residual={residual_snapshot_id}")
+                elif experiment.model_snapshot_id:
+                    base_snapshot_id = experiment.model_snapshot_id
+                    print(f"[Evaluation] Policy mode=model, training_mode=standard: model={base_snapshot_id}")
+                else:
+                    raise ValueError("Evaluation in model mode requires a model snapshot")
+
+                base_snapshot = crud.get_entity(db, db_models.ModelSnapshot, base_snapshot_id)
+                if not base_snapshot:
+                    raise ValueError(f"Base model snapshot {base_snapshot_id} not found")
+                print(f"[Evaluation] Base model: {base_snapshot.file_path}")
             else:
-                raise ValueError("Evaluation requires a model snapshot")
+                print(f"[Evaluation] Policy mode=heuristic, algorithm={heuristic_algorithm}")
 
-            # Load base model snapshot
-            base_snapshot = crud.get_entity(db, db_models.ModelSnapshot, base_snapshot_id)
-            if not base_snapshot:
-                raise ValueError(f"Base model snapshot {base_snapshot_id} not found")
-
-            print(f"[Evaluation] Base model: {base_snapshot.file_path}")
             print(f"[Evaluation] Environment: {environment.name}")
             print(f"[Evaluation] Agent: {agent.name}")
             print(f"[Evaluation] Episodes to run: {experiment.evaluation_episodes}")
             print(f"[Evaluation] FPS delay: {experiment.fps_delay or 0}ms")
 
-            # Get the agent configuration from the snapshot metadata
-            # This agent was used during training, so we recreate env with its exact config
-            snapshot_agent_id = base_snapshot.metrics_at_save.get('agent_id') if base_snapshot.metrics_at_save else None
-            training_agent = agent  # Default to current agent
-            
-            if snapshot_agent_id:
-                print(f"[Evaluation] Loading agent config from snapshot (agent_id={snapshot_agent_id})")
-                training_agent = crud.get_entity(db, db_models.Agent, snapshot_agent_id)
-                
-                if training_agent:
-                    print(f"[Evaluation] Found training agent: {training_agent.name}")
-                    print(f"[Evaluation] Training config: kinematic={getattr(training_agent, 'kinematic_type', 'holonomic')}, lidar_rays={training_agent.lidar_rays}")
+            # Use snapshot agent config for model-based evaluation, and experiment agent config for heuristics.
+            training_agent = agent
+            if not is_heuristic_mode and base_snapshot is not None:
+                snapshot_agent_id = base_snapshot.metrics_at_save.get('agent_id') if base_snapshot.metrics_at_save else None
+                if snapshot_agent_id:
+                    print(f"[Evaluation] Loading agent config from snapshot (agent_id={snapshot_agent_id})")
+                    training_agent = crud.get_entity(db, db_models.Agent, snapshot_agent_id)
+
+                    if training_agent:
+                        print(f"[Evaluation] Found training agent: {training_agent.name}")
+                        print(f"[Evaluation] Training config: kinematic={getattr(training_agent, 'kinematic_type', 'holonomic')}, lidar_rays={training_agent.lidar_rays}")
+                    else:
+                        print(f"[Evaluation] Warning: Agent {snapshot_agent_id} not found, using current agent")
+                        training_agent = agent
                 else:
-                    print(f"[Evaluation] Warning: Agent {snapshot_agent_id} not found, using current agent")
-                    training_agent = agent
+                    print(f"[Evaluation] Warning: No agent_id in snapshot metadata, using current agent config")
             else:
-                print(f"[Evaluation] Warning: No agent_id in snapshot metadata, using current agent config")
+                print(f"[Evaluation] Using experiment agent config for heuristic baseline")
 
             # Create environment with training agent configuration
             obstacles = environment.obstacles if environment.obstacles else []
@@ -404,6 +440,15 @@ class EvaluationMixin:
                 'success_reward': reward_function.success_reward,
                 'crash_reward': reward_function.crash_reward
             }
+
+            # Use experiment seed for deterministic scenario generation when provided.
+            experiment_seed = getattr(experiment, "seed", None)
+            predicted_env_seed = (
+                int(environment.created_at.timestamp())
+                if getattr(environment, "is_predicted", False) and environment.created_at
+                else None
+            )
+            env_seed = int(experiment_seed) if experiment_seed is not None else predicted_env_seed
             
             env = DroneSwarmEnv(
                 corridor_length=environment.length,
@@ -423,12 +468,13 @@ class EvaluationMixin:
                 target_diameter=environment.target_diameter,
                 max_ep_length=experiment.max_ep_length,
                 kinematic_type=getattr(training_agent, 'kinematic_type', 'holonomic'),
-                # Predicted mode for reproducible scenarios
-                predicted_seed=int(environment.created_at.timestamp()) if getattr(environment, 'is_predicted', False) and environment.created_at else None
+                predicted_seed=env_seed,
             )
-            
-            if getattr(environment, 'is_predicted', False) and environment.created_at:
-                print(f"[Evaluation] Predicted mode ENABLED: seed={int(environment.created_at.timestamp())}")
+
+            if experiment_seed is not None:
+                print(f"[Evaluation] Environment scenario seed ENABLED from experiment.seed={env_seed}")
+            elif predicted_env_seed is not None:
+                print(f"[Evaluation] Predicted mode ENABLED: seed={predicted_env_seed}")
 
             print(f"[Evaluation] Created DroneSwarmEnv with training agent config")
             print(f"[Evaluation] Observation space: {env.observation_space}")
@@ -436,64 +482,45 @@ class EvaluationMixin:
             print(f"[Evaluation] Kinematic type: {getattr(training_agent, 'kinematic_type', 'holonomic')}")
             print(f"[Evaluation] Lidar: range={training_agent.lidar_range}m, rays={training_agent.lidar_rays}")
 
-            # Configure safety constraint if enabled
-            # Match wrapper order from training so Shield sees the combined action.
-            # DroneSwarmEnv → SafetyShieldWrapper → ResidualActionWrapper → AppendLambdaWrapper
-            # This ensures Shield sees the combined action (base + K * residual), not raw residual.
-            
-            # Load lambda value from snapshot metadata (prioritize residual model lambda if in residual mode)
+            # Match wrapper order from training in model mode:
+            # DroneSwarmEnv -> ResidualActionWrapper -> AppendLambdaWrapper.
+            # In heuristic mode, AppendLambdaWrapper is still used so observation shape remains aligned.
+
+            # Load lambda value (fixed during evaluation for deterministic behavior).
             stored_lambda = 0.0
-            
-            # For residual training mode, prioritize residual model's lambda over base model's lambda
-            if experiment.training_mode == "residual" and residual_snapshot_id:
-                residual_snapshot = crud.get_entity(db, db_models.ModelSnapshot, residual_snapshot_id)
-                if residual_snapshot and residual_snapshot.metrics_at_save and 'lambda' in residual_snapshot.metrics_at_save:
-                    stored_lambda = float(residual_snapshot.metrics_at_save['lambda'])
-                    print(f"[Evaluation] Using λ={stored_lambda:.4f} from residual model snapshot")
-                elif base_snapshot.metrics_at_save and 'lambda' in base_snapshot.metrics_at_save:
-                    stored_lambda = float(base_snapshot.metrics_at_save['lambda'])
-                    print(f"[Evaluation] Using λ={stored_lambda:.4f} from base model snapshot (residual model λ not found)")
+            if is_heuristic_mode:
+                safety_config = experiment.safety_constraint if hasattr(experiment, 'safety_constraint') else None
+                if isinstance(safety_config, dict) and safety_config.get("enabled", False):
+                    stored_lambda = float(safety_config.get("initial_lambda", 0.0))
+                    print(f"[Evaluation] Heuristic mode uses fixed λ={stored_lambda:.4f} from safety config initial_lambda")
                 else:
-                    print(f"[Evaluation] No λ found in either residual or base model snapshots, using λ=0.0")
+                    print(f"[Evaluation] Heuristic mode with safety disabled, using λ=0.0")
             else:
-                # Standard training mode or no residual snapshot - use base model lambda
-                if base_snapshot.metrics_at_save and 'lambda' in base_snapshot.metrics_at_save:
-                    stored_lambda = float(base_snapshot.metrics_at_save['lambda'])
-                    print(f"[Evaluation] Using λ={stored_lambda:.4f} from base model snapshot")
+                # For residual training mode, prioritize residual model lambda over base model lambda.
+                if experiment.training_mode == "residual" and residual_snapshot_id:
+                    residual_snapshot = crud.get_entity(db, db_models.ModelSnapshot, residual_snapshot_id)
+                    if residual_snapshot and residual_snapshot.metrics_at_save and 'lambda' in residual_snapshot.metrics_at_save:
+                        stored_lambda = float(residual_snapshot.metrics_at_save['lambda'])
+                        print(f"[Evaluation] Using λ={stored_lambda:.4f} from residual model snapshot")
+                    elif base_snapshot and base_snapshot.metrics_at_save and 'lambda' in base_snapshot.metrics_at_save:
+                        stored_lambda = float(base_snapshot.metrics_at_save['lambda'])
+                        print(f"[Evaluation] Using λ={stored_lambda:.4f} from base model snapshot (residual model λ not found)")
+                    else:
+                        print(f"[Evaluation] No λ found in either residual or base model snapshots, using λ=0.0")
                 else:
-                    print(f"[Evaluation] No λ in base model snapshot metadata, using λ=0.0")
-            
+                    if base_snapshot and base_snapshot.metrics_at_save and 'lambda' in base_snapshot.metrics_at_save:
+                        stored_lambda = float(base_snapshot.metrics_at_save['lambda'])
+                        print(f"[Evaluation] Using λ={stored_lambda:.4f} from base model snapshot")
+                    else:
+                        print(f"[Evaluation] No λ in base model snapshot metadata, using λ=0.0")
+
             lagrange_state = LagrangeState(lam=stored_lambda)
-            
-            # Check Shield configuration FIRST (before applying wrappers)
-            safety_config = experiment.safety_constraint if hasattr(experiment, 'safety_constraint') else None
-            
-            # Convert Pydantic model to dict if needed for consistent access
-            if safety_config is not None and hasattr(safety_config, 'model_dump'):
-                safety_config_dict = safety_config.model_dump()
-            elif safety_config is not None and hasattr(safety_config, 'dict'):
-                safety_config_dict = safety_config.dict()
-            elif isinstance(safety_config, dict):
-                safety_config_dict = safety_config
-            else:
-                safety_config_dict = {}
-            
-            shield_enabled = False
 
-            print(f"\n[Evaluation] === Safety Shield Configuration Check ===")
-            print(f"[Evaluation] shield_enabled result: {shield_enabled}")
-            print(f"[Evaluation] ==========================================\n")
-
-            shield_wrapper = None
-            print(f"[Evaluation] ❌ SafetyShield DISABLED")
-            
-            # STEP 2: Apply ResidualActionWrapper (if in residual mode) - AFTER Shield
-            if experiment.training_mode == "residual" and residual_snapshot_id:
-                residual_snapshot = crud.get_entity(db, db_models.ModelSnapshot, residual_snapshot_id)
-                
+            # STEP 2: Apply ResidualActionWrapper only for model+residual evaluation.
+            if not is_heuristic_mode and experiment.training_mode == "residual" and residual_snapshot_id:
                 if not residual_snapshot:
                     raise ValueError(f"Residual snapshot {residual_snapshot_id} not found")
-                
+
                 # Try to get connector_id from snapshot metadata first, fallback to experiment
                 residual_connector_id = None
                 if residual_snapshot.metrics_at_save and 'residual_connector_id' in residual_snapshot.metrics_at_save:
@@ -562,36 +589,48 @@ class EvaluationMixin:
                     print(f"[Evaluation] CARS enabled")
                 print(f"[Evaluation] Environment wrapped with ResidualActionWrapper")
             
-            # STEP 3: Apply AppendLambdaWrapper LAST (before loading model)
+            # STEP 3: Apply AppendLambdaWrapper LAST (before loading policy).
             env = AppendLambdaWrapper(env, lagrange_state)
             print(f"[Evaluation] Wrapped environment with AppendLambdaWrapper (λ={stored_lambda:.4f})")
 
-            
             print(f"[Evaluation] Final observation space: {env.observation_space}")
 
-            # Load the appropriate model
-            if experiment.training_mode == "residual" and residual_snapshot_id:
-                # Load residual policy model
-                try:
-                    model = PPO.load(residual_snapshot.file_path, env=env)
-                    print(f"[Evaluation] Loaded residual PPO model from {residual_snapshot.file_path}")
-                except Exception:
-                    try:
-                        model = SAC.load(residual_snapshot.file_path, env=env)
-                        print(f"[Evaluation] Loaded residual SAC model from {residual_snapshot.file_path}")
-                    except Exception as e:
-                        raise ValueError(f"Failed to load residual model: {e}")
+            # Load model policy or instantiate heuristic baseline policy.
+            model = None
+            heuristic_policy = None
+            if is_heuristic_mode:
+                if heuristic_algorithm not in {"potential_field", "vfh_lite"}:
+                    raise ValueError(
+                        "Heuristic evaluation requires heuristic_algorithm to be one of: "
+                        "potential_field, vfh_lite"
+                    )
+                heuristic_policy = create_heuristic_policy(
+                    algorithm=heuristic_algorithm,
+                    kinematic_type=getattr(training_agent, 'kinematic_type', 'holonomic'),
+                    num_lidar_rays=int(training_agent.lidar_rays),
+                )
+                print(f"[Evaluation] Loaded heuristic policy: {heuristic_algorithm}")
             else:
-                # Load standard model
-                try:
-                    model = PPO.load(base_snapshot.file_path, env=env)
-                    print(f"[Evaluation] Loaded PPO model")
-                except Exception:
+                if experiment.training_mode == "residual" and residual_snapshot is not None:
                     try:
-                        model = SAC.load(base_snapshot.file_path, env=env)
-                        print(f"[Evaluation] Loaded SAC model")
-                    except Exception as e:
-                        raise ValueError(f"Failed to load model: {e}")
+                        model = PPO.load(residual_snapshot.file_path, env=env)
+                        print(f"[Evaluation] Loaded residual PPO model from {residual_snapshot.file_path}")
+                    except Exception:
+                        try:
+                            model = SAC.load(residual_snapshot.file_path, env=env)
+                            print(f"[Evaluation] Loaded residual SAC model from {residual_snapshot.file_path}")
+                        except Exception as e:
+                            raise ValueError(f"Failed to load residual model: {e}")
+                else:
+                    try:
+                        model = PPO.load(base_snapshot.file_path, env=env)
+                        print(f"[Evaluation] Loaded PPO model")
+                    except Exception:
+                        try:
+                            model = SAC.load(base_snapshot.file_path, env=env)
+                            print(f"[Evaluation] Loaded SAC model")
+                        except Exception as e:
+                            raise ValueError(f"Failed to load model: {e}")
 
             # Initialize metrics tracking (similar to ExperimentCallback)
             episode_rewards = []
@@ -613,18 +652,25 @@ class EvaluationMixin:
             # CARS K components for charting
             all_k_conf = []
             all_k_risk = []
+            all_action_clipping = []
             
             # Trajectory storage for replay
             trajectory = []
+            run_without_simulation = bool(getattr(experiment, "run_without_simulation", False))
             
             # Run evaluation episodes
             total_episodes = experiment.evaluation_episodes
-            fps_delay_seconds = (experiment.fps_delay or 0) / 1000.0
+            fps_delay_seconds = 0.0 if run_without_simulation else (experiment.fps_delay or 0) / 1000.0
+            if run_without_simulation:
+                print("[Evaluation] Fast mode enabled: skipping simulation frames and trajectory recording")
             
             for episode in range(total_episodes):
                 if cancel_event.is_set():
                     print(f"[Evaluation] Cancelled at episode {episode}")
                     break
+
+                if is_heuristic_mode and heuristic_policy is not None:
+                    heuristic_policy.reset()
                 
                 obs, info = env.reset()
                 done = False
@@ -645,7 +691,11 @@ class EvaluationMixin:
                 
                 while not (done or truncated) and not cancel_event.is_set():
                     # Use deterministic predictions for reproducible evaluation
-                    action, _ = model.predict(obs, deterministic=True)
+                    if is_heuristic_mode:
+                        action = heuristic_policy.predict(obs)
+                    else:
+                        action, _ = model.predict(obs, deterministic=True)
+                    action = np.asarray(action, dtype=np.float32)
                     
                     obs, reward, done, truncated, info = env.step(action)
                     
@@ -699,6 +749,65 @@ class EvaluationMixin:
                             all_k_conf.append(res_info['K_conf'])
                         if 'K_risk' in res_info:
                             all_k_risk.append(res_info['K_risk'])
+                        if 'action_clipped' in res_info:
+                            all_action_clipping.append(res_info['action_clipped'])
+
+                    # Fast mode: skip frame extraction/trajectory, keep metrics and progress updates.
+                    if run_without_simulation:
+                        if step % 50 == 0:
+                            try:
+                                metrics = self._calculate_evaluation_metrics(
+                                    episode_rewards,
+                                    episode_lengths,
+                                    episode_successes,
+                                    episode_crashes,
+                                    episode_timeouts,
+                                    episode_costs,
+                                    episode_near_misses,
+                                    episode_danger_time,
+                                    lagrange_state,
+                                    experiment.safety_constraint if hasattr(experiment, 'safety_constraint') else None,
+                                    residual_magnitudes if residual_magnitudes else None,
+                                    base_magnitudes if base_magnitudes else None,
+                                    all_cosine_sims if all_cosine_sims else None,
+                                    all_intervention_flags if all_intervention_flags else None,
+                                    effective_k_values=all_effective_k if all_effective_k else None,
+                                    k_conf_values=all_k_conf if all_k_conf else None,
+                                    k_risk_values=all_k_risk if all_k_risk else None,
+                                    action_clipping_flags=all_action_clipping if all_action_clipping else None,
+                                    window_size=50
+                                )
+                            except Exception as e:
+                                print(f"[Evaluation] Error calculating metrics at step {step}: {e}")
+                                metrics = {
+                                    'reward_raw_mean': float(episode_reward) if 'episode_reward' in locals() else 0.0,
+                                    'mean_reward': float(episode_reward) if 'episode_reward' in locals() else 0.0,
+                                    'lambda': float(lagrange_state.lam) if lagrange_state else 0.0,
+                                }
+
+                            progress_data = {
+                                'experiment_id': experiment_id,
+                                'step': 0,
+                                'total_steps': 0,
+                                'episode': episode + 1,
+                                'total_episodes': total_episodes,
+                                'metrics': metrics,
+                                'status': 'In Progress',
+                                'timestamp': time.time()
+                            }
+
+                            try:
+                                asyncio.run_coroutine_threadsafe(
+                                    broadcast_func(experiment_id, {
+                                        "type": "progress",
+                                        "data": progress_data
+                                    }),
+                                    loop
+                                )
+                            except Exception as e:
+                                if step % 500 == 0:
+                                    print(f"[Evaluation] WebSocket broadcast error at step {step}: {e}")
+                        continue
                     
                     # Get agent position and velocity from base environment (same method as training callback)
                     agent_pos = [0, 0, 0]
@@ -821,10 +930,10 @@ class EvaluationMixin:
                                 base_magnitudes if base_magnitudes else None,
                                 all_cosine_sims if all_cosine_sims else None,
                                 all_intervention_flags if all_intervention_flags else None,
-                                None,  # episode_shield_intervention_counts not used
                                 effective_k_values=all_effective_k if all_effective_k else None,
                                 k_conf_values=all_k_conf if all_k_conf else None,
                                 k_risk_values=all_k_risk if all_k_risk else None,
+                                action_clipping_flags=all_action_clipping if all_action_clipping else None,
                                 window_size=50  # Use recent 50 episodes for rolling metrics
                             )
                         except Exception as e:
@@ -879,10 +988,6 @@ class EvaluationMixin:
                 
                 print(f"[Evaluation] Episode {episode + 1} complete: reward={episode_reward:.2f}, steps={step}, success={success}, crash={crash}, timeout={timeout}")
                 
-                # Update Lagrangian multiplier if safety constraint is enabled
-                if experiment.safety_constraint and experiment.safety_constraint.get('enabled', False):
-                    lagrange_state.update(episode_cost)
-                
                 # Calculate comprehensive metrics for this episode completion
                 try:
                     metrics = self._calculate_evaluation_metrics(
@@ -900,10 +1005,10 @@ class EvaluationMixin:
                         base_magnitudes if base_magnitudes else None,
                         all_cosine_sims if all_cosine_sims else None,
                         all_intervention_flags if all_intervention_flags else None,
-                        None,  # episode_shield_intervention_counts not used
                         effective_k_values=all_effective_k if all_effective_k else None,
                         k_conf_values=all_k_conf if all_k_conf else None,
                         k_risk_values=all_k_risk if all_k_risk else None,
+                        action_clipping_flags=all_action_clipping if all_action_clipping else None,
                         window_size=None  # Use all episodes for cumulative metrics
                     )
                 except Exception as e:
@@ -911,13 +1016,19 @@ class EvaluationMixin:
                     import traceback
                     traceback.print_exc()
                     # Use minimal metrics on error
+                    _sr = float(np.mean(episode_successes)) * 100.0 if episode_successes else 0.0
+                    _cr = float(np.mean(episode_crashes)) * 100.0 if episode_crashes else 0.0
+                    _tr = float(np.mean(episode_timeouts)) * 100.0 if episode_timeouts else 0.0
                     metrics = {
                         'reward_raw_mean': float(episode_reward),
                         'mean_reward': float(episode_reward),
                         'mean_ep_length': int(step),
-                        'success_rate': round(float(np.mean(episode_successes)) * 100.0 * 2) / 2 if episode_successes else 0.0,
-                        'crash_rate': round(float(np.mean(episode_crashes)) * 100.0 * 2) / 2 if episode_crashes else 0.0,
-                        'timeout_rate': round(float(np.mean(episode_timeouts)) * 100.0 * 2) / 2 if episode_timeouts else 0.0,
+                        'success_rate_raw': _sr,
+                        'crash_rate_raw': _cr,
+                        'timeout_rate_raw': _tr,
+                        'success_rate': round(_sr * 2) / 2,
+                        'crash_rate': round(_cr * 2) / 2,
+                        'timeout_rate': round(_tr * 2) / 2,
                         'cost_mean': float(episode_cost),
                         'near_miss_mean': float(episode_near_miss_count),
                         'danger_time_mean': float(episode_danger_count),
@@ -955,7 +1066,7 @@ class EvaluationMixin:
                     print(f"[Evaluation] Episode completion WebSocket broadcast error: {e}")
             
             # Evaluation completed - save trajectory and final metrics
-            if trajectory:
+            if trajectory and not run_without_simulation:
                 crud.update_experiment_trajectory(db, experiment_id, trajectory)
                 print(f"[Evaluation] Saved trajectory with {len(trajectory)} frames")
             
@@ -980,10 +1091,10 @@ class EvaluationMixin:
                     base_magnitudes if base_magnitudes else None,
                     all_cosine_sims if all_cosine_sims else None,
                     all_intervention_flags if all_intervention_flags else None,
-                    None,  # episode_shield_intervention_counts not used
                     effective_k_values=all_effective_k if all_effective_k else None,
                     k_conf_values=all_k_conf if all_k_conf else None,
                     k_risk_values=all_k_risk if all_k_risk else None,
+                    action_clipping_flags=all_action_clipping if all_action_clipping else None,
                     window_size=None  # Use all episodes for final metrics
                 )
                 
@@ -996,12 +1107,18 @@ class EvaluationMixin:
                 import traceback
                 traceback.print_exc()
                 # Use minimal metrics on error
+                _sr_f = float(np.mean(episode_successes)) * 100.0 if episode_successes else 0.0
+                _cr_f = float(np.mean(episode_crashes)) * 100.0 if episode_crashes else 0.0
+                _tr_f = float(np.mean(episode_timeouts)) * 100.0 if episode_timeouts else 0.0
                 final_metrics = {
                     'reward_raw_mean': float(np.mean(episode_rewards)) if episode_rewards else 0.0,
                     'avg_reward': float(np.mean(episode_rewards)) if episode_rewards else 0.0,
-                    'success_rate': round(float(np.mean(episode_successes)) * 100.0 * 2) / 2 if episode_successes else 0.0,
-                    'crash_rate': round(float(np.mean(episode_crashes)) * 100.0 * 2) / 2 if episode_crashes else 0.0,
-                    'timeout_rate': round(float(np.mean(episode_timeouts)) * 100.0 * 2) / 2 if episode_timeouts else 0.0,
+                    'success_rate_raw': _sr_f,
+                    'crash_rate_raw': _cr_f,
+                    'timeout_rate_raw': _tr_f,
+                    'success_rate': round(_sr_f * 2) / 2,
+                    'crash_rate': round(_cr_f * 2) / 2,
+                    'timeout_rate': round(_tr_f * 2) / 2,
                     'avg_cost': float(np.mean(episode_costs)) if episode_costs else 0.0,
                     'avg_episode_length': float(np.mean(episode_lengths)) if episode_lengths else 0.0,
                     'lambda': float(lagrange_state.lam) if lagrange_state else 0.0,

@@ -218,6 +218,12 @@ class ExperimentBase(BaseModel):
     safety_constraint: Optional[SafetyConstraintConfig] = Field(None, description="Safety constraint configuration")
     evaluation_episodes: Optional[int] = Field(None, gt=0, description="Number of episodes for evaluation mode")
     fps_delay: Optional[float] = Field(None, ge=0, description="Delay in milliseconds between steps for visualization")
+    run_without_simulation: Optional[bool] = Field(
+        False,
+        description="Fast mode: skip simulation frame generation and trajectory recording",
+    )
+    evaluation_policy_mode: Optional[str] = Field("model", description="Evaluation policy mode: model or heuristic")
+    heuristic_algorithm: Optional[str] = Field(None, description="Heuristic algorithm: potential_field or vfh_lite")
     seed: Optional[int] = Field(None, ge=0, description="Random seed for reproducibility. If None, a random seed will be used.")
 
 
@@ -232,6 +238,9 @@ class ExperimentUpdate(BaseModel):
     snapshot_freq: Optional[int] = Field(None, gt=0)
     evaluation_episodes: Optional[int] = Field(None, gt=0)
     fps_delay: Optional[float] = Field(None, ge=0)
+    run_without_simulation: Optional[bool] = None
+    evaluation_policy_mode: Optional[str] = None
+    heuristic_algorithm: Optional[str] = None
     seed: Optional[int] = Field(None, ge=0)
 
 

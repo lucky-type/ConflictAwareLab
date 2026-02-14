@@ -31,6 +31,7 @@ class ExperimentCallback(BaseCallback):
         lagrange_state=None,
         safety_config=None,
         lagrange_callback=None,
+        run_without_simulation: bool = False,
         verbose: int = 0,
     ):
         super().__init__(verbose)
@@ -46,6 +47,7 @@ class ExperimentCallback(BaseCallback):
         self.lagrange_state = lagrange_state  # For tracking λ
         self.safety_config = safety_config  # For tracking ε
         self.lagrange_callback = lagrange_callback  # For tracking warmup state
+        self.run_without_simulation = run_without_simulation
         
         # Episode tracking
         self.episode_count = 0
@@ -85,7 +87,8 @@ class ExperimentCallback(BaseCallback):
         # NEW: CARS K components for charting
         self.k_conf_values = []    # K_conf (conflict-aware)
         self.k_risk_values = []    # K_risk (λ-based)
-        
+        self.action_clipping_flags = []  # Action saturation tracking
+
         # Cache for algorithm-specific metrics (captured during training)
         self.last_train_metrics = {}
         
@@ -205,7 +208,9 @@ class ExperimentCallback(BaseCallback):
                     self.k_conf_values.append(res_info["K_conf"])
                 if "K_risk" in res_info:
                     self.k_risk_values.append(res_info["K_risk"])
-                
+                if "action_clipped" in res_info:
+                    self.action_clipping_flags.append(res_info["action_clipped"])
+
                 # Check for significant intervention
                 res_norm = res_info.get("residual_magnitude", 0.0)
                 intervention_threshold = 0.05
@@ -340,7 +345,7 @@ class ExperimentCallback(BaseCallback):
             if isinstance(obs, np.ndarray):
                 has_obs = obs.size > 0
             
-            if has_obs and self.environment:
+            if not self.run_without_simulation and has_obs and self.environment:
                 # Map observation to position based on drone environment
                 env_length = self.environment.length if self.environment else 100.0
                 env_width = self.environment.width if self.environment else 20.0
@@ -566,7 +571,7 @@ class ExperimentCallback(BaseCallback):
                 # Broadcast live frame every 50 steps for visualization during training
                 if self.n_calls % 50 == 0:
                     try:
-                        future = asyncio.run_coroutine_threadsafe(
+                        asyncio.run_coroutine_threadsafe(
                             self.broadcast_func(
                                 self.experiment_id,
                                 {
@@ -576,7 +581,6 @@ class ExperimentCallback(BaseCallback):
                             ),
                             self.loop
                         )
-                        future.result(timeout=0.5)
                     except Exception as e:
                         print(f"[Callback] Frame broadcast error: {e}")
                 
@@ -605,6 +609,15 @@ class ExperimentCallback(BaseCallback):
                         self.trajectory = self.trajectory[-max_trajectory_size:]
                     
                     print(f"[Callback] Episode {self.episode_count} ended. Total trajectory frames: {len(self.trajectory)}")
+            elif done and self.run_without_simulation:
+                # In fast mode we do not record frames, but reset legacy accumulators.
+                self.current_episode_reward_raw = 0.0
+                self.current_episode_reward_shaped = 0.0
+                self.current_episode_cost = 0.0
+                self.current_episode_near_misses = 0
+                self.current_episode_danger_time = 0
+                self.current_episode_length = 0
+                self.current_episode_frames = []
         except Exception as e:
             print(f"[Callback] Error capturing trajectory: {e}")
         
@@ -657,10 +670,14 @@ class ExperimentCallback(BaseCallback):
             metrics["reward_raw_mean"] = float(np.mean(recent_rewards_raw))
             metrics["reward_raw_std"] = float(np.std(recent_rewards_raw))
             metrics["reward_shaped_mean"] = float(np.mean(recent_rewards_shaped))
-            # Round to 0.5% precision (nearest 0.5)
-            metrics["success_rate"] = round(float(np.mean(recent_successes)) * 100.0 * 2) / 2  # Percentage with 0.5 precision
-            metrics["crash_rate"] = round(float(np.mean(recent_crashes)) * 100.0 * 2) / 2  # Percentage with 0.5 precision
-            metrics["timeout_rate"] = round(float(np.mean(recent_timeouts)) * 100.0 * 2) / 2  # Percentage with 0.5 precision
+            # Raw (unrounded) values for statistical analysis
+            metrics["success_rate_raw"] = float(np.mean(recent_successes)) * 100.0
+            metrics["crash_rate_raw"] = float(np.mean(recent_crashes)) * 100.0
+            metrics["timeout_rate_raw"] = float(np.mean(recent_timeouts)) * 100.0
+            # Rounded to 0.5% precision for UI display
+            metrics["success_rate"] = round(metrics["success_rate_raw"] * 2) / 2
+            metrics["crash_rate"] = round(metrics["crash_rate_raw"] * 2) / 2
+            metrics["timeout_rate"] = round(metrics["timeout_rate_raw"] * 2) / 2
             metrics["mean_ep_length"] = float(np.mean(recent_lengths))
             metrics["ep_length_std"] = float(np.std(recent_lengths))
         else:
@@ -760,9 +777,6 @@ class ExperimentCallback(BaseCallback):
             metrics["danger_time_mean"] = 0.0
             metrics["violation_rate"] = 0.0
         
-        metrics["shield_intervention_rate"] = 0.0
-        metrics["shield_interventions_per_episode"] = 0.0
-
     def _add_warmup_metrics(self, metrics: dict):
         """Add warmup-related metrics if available."""
         if self.lagrange_callback:
@@ -887,16 +901,18 @@ class ExperimentCallback(BaseCallback):
         if len(self.cosine_similarities) > 0:
             metrics["conflict_mean"] = float(np.mean(self.cosine_similarities))
             metrics["conflict_std"] = float(np.std(self.cosine_similarities))
-            
+            metrics["conflict_negative_rate"] = float(np.mean([cs < 0 for cs in self.cosine_similarities])) * 100.0
+
             # TensorBoard logging
             self.logger.record("residual/policy_conflict_mean", metrics["conflict_mean"])
             self.logger.record("residual/policy_conflict_std", metrics["conflict_std"])
-            
+
             # Clear buffer
             self.cosine_similarities = []
         else:
             metrics["conflict_mean"] = 0.0
             metrics["conflict_std"] = 0.0
+            metrics["conflict_negative_rate"] = 0.0
         
         # NEW: Intervention Rate (% of steps where residual > threshold)
         if len(self.intervention_flags) > 0:
@@ -938,11 +954,21 @@ class ExperimentCallback(BaseCallback):
         if len(self.k_risk_values) > 0:
             metrics["k_risk_mean"] = float(np.mean(self.k_risk_values))
             self.logger.record("cars/k_risk", metrics["k_risk_mean"])
+
+            # Risk activation rate (% of steps where K_risk > 1.0)
+            metrics["risk_activation_rate"] = float(np.mean([kr > 1.0 for kr in self.k_risk_values])) * 100.0
+
             self.k_risk_values = []
         else:
             metrics["k_risk_mean"] = 1.0  # Default when no λ
-        
-        metrics["k_shield_mean"] = 1.0
+            metrics["risk_activation_rate"] = 0.0
+
+        # Action clipping rate (% of steps where action saturated at ±1)
+        if len(self.action_clipping_flags) > 0:
+            metrics["action_clipping_rate"] = float(np.mean(self.action_clipping_flags)) * 100.0
+            self.action_clipping_flags = []
+        else:
+            metrics["action_clipping_rate"] = 0.0
 
     def _save_metrics_to_db(self, metrics: dict):
         """Save metrics to database."""

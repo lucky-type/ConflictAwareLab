@@ -269,12 +269,24 @@ class TrainingMixin:
             'max_ep_length': experiment.max_ep_length,
             'kinematic_type': agent.kinematic_type if hasattr(agent, 'kinematic_type') else "holonomic"
         }
-        
-        # Add predicted_seed for reproducible environments
-        if getattr(environment, 'is_predicted', False) and environment.created_at:
-            predicted_seed = int(environment.created_at.timestamp())
-            env_kwargs['predicted_seed'] = predicted_seed
-            print(f"[Training] Predicted mode ENABLED: seed={predicted_seed} (from {environment.created_at})")
+
+        # Use experiment seed for deterministic scenario generation when provided.
+        experiment_seed = getattr(experiment, "seed", None)
+        predicted_env_seed = (
+            int(environment.created_at.timestamp())
+            if getattr(environment, "is_predicted", False) and environment.created_at
+            else None
+        )
+        env_seed = int(experiment_seed) if experiment_seed is not None else predicted_env_seed
+        if env_seed is not None:
+            env_kwargs["predicted_seed"] = env_seed
+            if experiment_seed is not None:
+                print(f"[Training] Environment scenario seed ENABLED from experiment.seed={env_seed}")
+            else:
+                print(
+                    f"[Training] Predicted mode ENABLED: seed={env_seed} "
+                    f"(from {environment.created_at})"
+                )
         
         print(f"Creating DroneSwarmEnv...")
         env = DroneSwarmEnv(**env_kwargs)
@@ -300,13 +312,10 @@ class TrainingMixin:
         else:
             print(f"\n[Training] Safety Constraint DISABLED")
             lagrange_state = LagrangeState(lam=0.0)
-        #     env = shield_wrapper  # Also update env chain
-        #     print(f"[Training] SafetyShield ENABLED (drone_threshold={safety_config.get('shield_threshold', 0.3)}, wall_threshold={safety_config.get('shield_wall_threshold', 0.1)}, lidar_start={lidar_start})")
-        #     print(f"[Training] SafetyShield wraps DroneSwarmEnv BEFORE ResidualActionWrapper (sees combined action)")
         
-        # Handle residual learning mode (AFTER Shield, so Shield sees combined action)
+        # Handle residual learning mode.
         training_mode = getattr(experiment, 'training_mode', 'standard')
-        env = self._handle_residual_mode(db, experiment, env, lagrange_state, training_mode, shield_wrapper)
+        env = self._handle_residual_mode(db, experiment, env, lagrange_state, training_mode)
         
         # Always append λ to observations for consistent observation space (LAST wrapper before Monitor)
         env = AppendLambdaWrapper(env, lagrange_state)
@@ -328,8 +337,8 @@ class TrainingMixin:
 
         return env, lagrange_state, safety_config, training_mode
 
-    def _handle_residual_mode(self, db, experiment, env, lagrange_state, training_mode, shield_wrapper=None):
-        """Handle residual learning mode configuration with optional CARS shield integration."""
+    def _handle_residual_mode(self, db, experiment, env, lagrange_state, training_mode):
+        """Handle residual learning mode configuration."""
         if training_mode != 'residual':
             return env
 
@@ -631,6 +640,7 @@ class TrainingMixin:
             lagrange_state=lagrange_state,
             safety_config=safety_config,
             lagrange_callback=lagrange_callback,
+            run_without_simulation=bool(getattr(experiment, "run_without_simulation", False)),
         )
         
         # Create callback list

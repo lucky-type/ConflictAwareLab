@@ -797,12 +797,20 @@ export default function TrainingInfoModal({
 
                     <div className="rounded-xl border border-notion-border bg-notion-light-gray p-8 text-center">
                       <div className="text-notion-text-secondary">
-                        <div className="mb-2">No trajectory data available for this experiment.</div>
-                        <div className="text-sm text-notion-text-tertiary">
-                          This experiment was completed before trajectory recording was implemented.
-                          <br />
-                          Run a new {experimentType.toLowerCase()} experiment to see the replay feature.
-                        </div>
+                        {experiment?.run_without_simulation ? (
+                          <div className="text-sm text-notion-text-tertiary">
+                            Replay unavailable: this run used fast mode without trajectory recording.
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mb-2">No trajectory data available for this experiment.</div>
+                            <div className="text-sm text-notion-text-tertiary">
+                              This experiment was completed before trajectory recording was implemented.
+                              <br />
+                              Run a new {experimentType.toLowerCase()} experiment to see the replay feature.
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -276,6 +276,15 @@ class SimulationMixin:
                 'success_reward': reward_function.success_reward,
                 'crash_reward': reward_function.crash_reward
             }
+
+            # Use experiment seed for deterministic scenario generation when provided.
+            experiment_seed = getattr(experiment, "seed", None)
+            predicted_env_seed = (
+                int(environment.created_at.timestamp())
+                if getattr(environment, "is_predicted", False) and environment.created_at
+                else None
+            )
+            env_seed = int(experiment_seed) if experiment_seed is not None else predicted_env_seed
             
             # Create DroneSwarmEnv with unique physics client for simulation
             env = DroneSwarmEnv(
@@ -296,12 +305,13 @@ class SimulationMixin:
                 target_diameter=environment.target_diameter,
                 max_ep_length=experiment.max_ep_length,
                 kinematic_type=agent.kinematic_type if hasattr(agent, 'kinematic_type') else "holonomic",
-                # Predicted mode for reproducible scenarios
-                predicted_seed=int(environment.created_at.timestamp()) if getattr(environment, 'is_predicted', False) and environment.created_at else None
+                predicted_seed=env_seed,
             )
-            
-            if getattr(environment, 'is_predicted', False) and environment.created_at:
-                print(f"[Simulation] Predicted mode ENABLED: seed={int(environment.created_at.timestamp())}")
+
+            if experiment_seed is not None:
+                print(f"[Simulation] Environment scenario seed ENABLED from experiment.seed={env_seed}")
+            elif predicted_env_seed is not None:
+                print(f"[Simulation] Predicted mode ENABLED: seed={predicted_env_seed}")
             
             print(f"[Simulation] Created DroneSwarmEnv with observation space: {env.observation_space}")
             print(f"[Simulation] Kinematic type: {agent.kinematic_type if hasattr(agent, 'kinematic_type') else 'holonomic'}")
@@ -350,8 +360,7 @@ class SimulationMixin:
                             target_diameter=environment.target_diameter,
                             max_ep_length=experiment.max_ep_length,
                             kinematic_type=getattr(trained_agent, 'kinematic_type', 'holonomic'),
-                            # Predicted mode for reproducible scenarios
-                            predicted_seed=int(environment.created_at.timestamp()) if getattr(environment, 'is_predicted', False) and environment.created_at else None
+                            predicted_seed=env_seed,
                         )
                         
                         print(f"[Simulation] Recreated env with trained agent config: {env.observation_space}")

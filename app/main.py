@@ -4,7 +4,7 @@ import asyncio
 import os
 import time
 import io
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -43,6 +43,73 @@ def _get_or_404(db: Session, model, entity_id: int):
     if not entity:
         raise HTTPException(status_code=404, detail="Item not found")
     return entity
+
+
+def _normalize_heuristic_algorithm_value(value: Any) -> str | None:
+    """Normalize heuristic algorithm value and keep legacy compatibility."""
+    if value is None:
+        return None
+
+    normalized = str(value).strip().lower()
+    if normalized == "":
+        return None
+    if normalized == "gap_following":
+        return "vfh_lite"
+    if normalized in {"potential_field", "vfh_lite"}:
+        return normalized
+
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            "Invalid heuristic_algorithm. Supported values are: "
+            "potential_field, vfh_lite"
+        ),
+    )
+
+
+def _normalize_experiment_heuristic_fields(
+    payload: Dict[str, Any],
+    *,
+    current_mode: str | None = None,
+    current_algorithm: str | None = None,
+) -> Dict[str, Any]:
+    """Normalize and validate evaluation policy fields for create/update payloads."""
+    normalized = dict(payload)
+
+    mode = normalized.get("evaluation_policy_mode", current_mode)
+    if mode is None:
+        mode = "model"
+    mode = str(mode).strip().lower()
+    if mode not in {"model", "heuristic"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid evaluation_policy_mode. Supported values are: model, heuristic",
+        )
+    normalized["evaluation_policy_mode"] = mode
+
+    if "heuristic_algorithm" in normalized:
+        normalized["heuristic_algorithm"] = _normalize_heuristic_algorithm_value(
+            normalized["heuristic_algorithm"]
+        )
+
+    algorithm = normalized.get("heuristic_algorithm", current_algorithm)
+    algorithm = _normalize_heuristic_algorithm_value(algorithm)
+
+    if mode == "heuristic" and algorithm is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "heuristic_algorithm is required when "
+                "evaluation_policy_mode='heuristic'"
+            ),
+        )
+
+    if mode == "model":
+        normalized["heuristic_algorithm"] = None
+    else:
+        normalized["heuristic_algorithm"] = algorithm
+
+    return normalized
 
 
 # ==================== ENVIRONMENTS ====================
@@ -237,7 +304,8 @@ def create_experiment(
     _get_or_404(db, models.RewardFunction, payload.reward_id)
     
     # Create experiment and lock entities
-    return crud.create_experiment_and_lock_entities(db, payload.dict())
+    payload_dict = _normalize_experiment_heuristic_fields(payload.dict())
+    return crud.create_experiment_and_lock_entities(db, payload_dict)
 
 
 @app.get("/experiments", response_model=List[schemas.ExperimentSummary])
@@ -267,6 +335,9 @@ def list_experiments(db: Session = Depends(get_db)):
             models.Experiment.max_ep_length,
             models.Experiment.evaluation_episodes,
             models.Experiment.fps_delay,
+            models.Experiment.run_without_simulation,
+            models.Experiment.evaluation_policy_mode,
+            models.Experiment.heuristic_algorithm,
             models.Experiment.safety_constraint,  # Small JSON
             models.Experiment.seed,
             models.Experiment.created_at,
@@ -310,7 +381,22 @@ def update_experiment(
 ):
     """Update an experiment (name, status, parameters)."""
     experiment = _get_or_404(db, models.Experiment, experiment_id)
-    return crud.update_entity(db, experiment, payload)
+    payload_dict = payload.dict(exclude_unset=True)
+    if not payload_dict:
+        return experiment
+
+    payload_dict = _normalize_experiment_heuristic_fields(
+        payload_dict,
+        current_mode=getattr(experiment, "evaluation_policy_mode", "model"),
+        current_algorithm=getattr(experiment, "heuristic_algorithm", None),
+    )
+
+    for key, value in payload_dict.items():
+        setattr(experiment, key, value)
+    db.add(experiment)
+    db.commit()
+    db.refresh(experiment)
+    return experiment
 
 
 @app.delete("/experiments/{experiment_id}")

@@ -22,6 +22,16 @@ class TrainingMode(str, enum.Enum):
     RESIDUAL = "residual"
 
 
+class EvaluationPolicyMode(str, enum.Enum):
+    MODEL = "model"
+    HEURISTIC = "heuristic"
+
+
+class HeuristicAlgorithm(str, enum.Enum):
+    POTENTIAL_FIELD = "potential_field"
+    VFH_LITE = "vfh_lite"
+
+
 class ExperimentStatus(str, enum.Enum):
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
@@ -190,6 +200,15 @@ class Experiment(Base):
     # Evaluation mode specific fields
     evaluation_episodes = Column(Integer, nullable=True)  # Number of episodes for evaluation mode
     fps_delay = Column(Float, nullable=True)  # Delay in milliseconds between steps for visualization
+    run_without_simulation = Column(
+        Boolean, nullable=False, default=False
+    )  # Fast mode: skip simulation frames and trajectory recording
+    evaluation_policy_mode = Column(
+        String(20), nullable=False, default=EvaluationPolicyMode.MODEL.value
+    )  # "model" or "heuristic"
+    heuristic_algorithm = Column(
+        String(50), nullable=True
+    )  # "potential_field" or "vfh_lite" when evaluation_policy_mode="heuristic"
     
     # Simulation-specific trajectory storage
     trajectory_data = Column(JSON, nullable=True, default=None)  # Store full flight path for replay
